@@ -1,0 +1,22 @@
+{
+  "name": "loxberry-maveo-connect",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "LoxBerry 3 plugin: Maveo Connect garage (Node daemon + PHP UI)",
+  "scripts": {
+    "icons": "node scripts/generate-icons.mjs",
+    "build:client": "npm ci --prefix maveo-connect-stick-client && npm run build --prefix maveo-connect-stick-client",
+    "build:daemon": "npm ci --prefix daemon && npm run build --prefix daemon",
+    "build": "npm run build:client && npm run build:daemon",
+    "pack": "node scripts/package-zip.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spid3r/loxberry-maveo-connect.git"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "archiver": "^7.0.1"
+  }
+}

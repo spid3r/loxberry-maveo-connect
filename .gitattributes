@@ -1,0 +1,8 @@
+# LoxBerry runs shell scripts on Linux; CRLF breaks #!/bin/bash
+*.sh text eol=lf
+postinstall.sh text eol=lf
+postupgrade.sh text eol=lf
+postroot.sh text eol=lf
+daemon.sh text eol=lf
+uninstall/** text eol=lf
+*.php text eol=lf

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" fill="#0d3320" rx="8"/>
+  <rect x="40" y="20" width="80" height="120" fill="#276749" stroke="#48bb78" stroke-width="3" rx="4"/>
+  <rect x="120" y="20" width="80" height="120" fill="#1a202c" stroke="#718096" stroke-width="3" rx="4" opacity="0.9"/>
+  <text x="120" y="150" text-anchor="middle" fill="#68d391" font-family="system-ui,sans-serif" font-size="14">Open</text>
+</svg>

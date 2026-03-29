@@ -1,0 +1,8 @@
+node_modules/
+daemon/node_modules/
+daemon/dist/
+dist/
+dist-staging/
+*.zip
+.env
+.DS_Store

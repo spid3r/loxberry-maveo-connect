@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" fill="#1e3a5f" rx="8"/>
+  <rect x="60" y="20" width="120" height="120" fill="#4a5568" stroke="#718096" stroke-width="4" rx="4"/>
+  <text x="120" y="150" text-anchor="middle" fill="#a0aec0" font-family="system-ui,sans-serif" font-size="14">Stopped</text>
+</svg>
