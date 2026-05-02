@@ -23,13 +23,16 @@ and (optionally) to Loxone via MQTT. Admin UI is **embedded** in the LoxBerry sh
 available in **German and English**.
 
 **Disclaimer (read this):** This project is **not** official, **not** endorsed by
-Marantec / Maveo, and **there is no support obligation** from Marantec or from the
-maintainers. It is a **community best-effort** tool that drives the same cloud APIs
-the official Maveo app uses. The service may **change or stop at any time**. Use at
-your own risk.
+Marantec / Maveo, and **there is no support obligation** from them or from the
+maintainers. It is a **community best-effort** tool that uses the same **cloud /
+IoT path** as the official Maveo app (Cognito + MQTT). Marantec or Maveo may
+**change, restrict, or discontinue** that integration **at any time** — the plugin
+may then stop working without notice. Use **at your own risk**. Full text:
+**[DISCLAIMER.md](./DISCLAIMER.md)** (German and English).
 
 ## Table of contents
 
+- [Disclaimer](#disclaimer)
 - [Features](#features)
 - [Screenshots (admin UI)](#screenshots-admin-ui)
 - [How it works](#how-it-works)
@@ -41,6 +44,12 @@ your own risk.
 - [Runtime compatibility](#runtime-compatibility)
 - [Best-practice alignment](#best-practice-alignment)
 - [License](#license)
+
+## Disclaimer
+
+The short paragraph at the top of this README is the executive summary. For the
+full bilingual legal notice (no support, cloud/API changes, trademarks), see
+**[DISCLAIMER.md](./DISCLAIMER.md)**.
 
 ## Features
 

@@ -16,6 +16,8 @@ Mit dem Plugin kannst du den **Garagentorantrieb über Marantec Maveo (Connect S
 
   * Optional kann der Daemon **MQTT‑Nachrichten** an einen **lokalen Broker** weiterleiten (z. B. LoxBerry‑MQTT, Home Assistant).
 
+**Disclaimer:** Das Projekt ist **öffentlich / community‑geführt**, **nicht** offiziell von Marantec oder Maveo. Die Cloud‑Anbindung (Cognito, IoT/MQTT) kann sich **jederzeit ändern** oder entfallen — das Plugin kann dadurch **ohne Vorankündigung** aufhören zu funktionieren. Volltext: **[[https://github.com/spid3r/loxberry-maveo-connect/blob/main/DISCLAIMER.md|DISCLAIMER auf GitHub]]**.
+
 ===== Download =====
 
 [[https://github.com/spid3r/loxberry-maveo-connect/releases|ZIP der aktuellen Version (GitHub Releases)]]

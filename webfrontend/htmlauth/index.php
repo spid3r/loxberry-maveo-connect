@@ -58,6 +58,15 @@ echo '<strong>' . mc_t('OVERVIEW', 'ALERT_NOTE', 'Hinweis:') . '</strong> '
     . mc_t('OVERVIEW', 'ALERT_BODY', 'Nur eine MQTT-Session pro Stick — die offizielle Maveo-App schließen, wenn dieses Plugin die Verbindung halten soll.');
 echo '</div>';
 
+echo '<details class="mc-legal-disclosure" style="margin-top:1rem;padding:0.75rem 1rem;border-radius:8px;border:1px solid #cfd8dc;background:#fafafa;">';
+echo '<summary style="cursor:pointer;font-size:0.9rem;color:#455a64;">';
+mc_te('OVERVIEW', 'LEGAL_SUMMARY', 'Legal (click to expand)');
+echo '</summary>';
+echo '<div class="mc-muted" style="margin-top:0.65rem;font-size:0.85rem;line-height:1.45;">';
+mc_th('OVERVIEW', 'LEGAL_BLOCK_HTML', '');
+echo '</div>';
+echo '</details>';
+
 echo '</div>';
 
 LBWeb::lbfooter();
