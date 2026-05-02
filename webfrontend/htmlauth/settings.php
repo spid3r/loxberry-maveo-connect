@@ -322,6 +322,26 @@ mc_te('SETTINGS', 'HINT_THING_NAME');
 echo '</span></div>';
 echo '</div>';
 
+echo '<div class="mc-panel" style="margin-top:14px;margin-bottom:6px;">';
+echo '<h2 class="mc-step-hint" style="margin-top:0;">';
+mc_te('SETTINGS', 'LOXONE_HELP_TITLE');
+echo '</h2>';
+echo '<p class="mc-muted" style="margin:0 0 10px;line-height:1.45;">';
+mc_te('SETTINGS', 'LOXONE_HELP_INTRO');
+echo '</p>';
+echo '<ul class="mc-muted" style="margin:0 0 12px;padding-left:1.25rem;line-height:1.45;">';
+echo '<li style="margin-bottom:6px;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXONE_HELP_B1', 'Status & control: door and light from the daemon, refreshed at short intervals.'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li style="margin-bottom:6px;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXONE_HELP_B2', 'MQTT forwarding: publish to broker; in Loxone Config subscribe to prefix topics.'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li>' . htmlspecialchars(mc_t('SETTINGS', 'LOXONE_HELP_B3', 'Door commands from Loxone are not accepted via this plugin’s MQTT — use status page, Maveo app, or Loxone actors.'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '</ul>';
+echo '<p class="mc-muted" style="margin:0 0 10px;line-height:1.45;font-size:.88rem;">';
+mc_te('SETTINGS', 'LOXONE_HELP_LATENCY');
+echo '</p>';
+echo '<p class="mc-muted" style="margin:0;line-height:1.45;font-size:.88rem;">';
+mc_te('SETTINGS', 'LOXONE_HELP_MQTT_AUTH');
+echo '</p>';
+echo '</div>';
+
 /** Everything below the dotted line is hidden behind the expert details element so a
  *  first-time user only sees: email, password, probe button, thing picker.  */
 echo '<details class="mc-expert">';

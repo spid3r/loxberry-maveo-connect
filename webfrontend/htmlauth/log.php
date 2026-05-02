@@ -27,9 +27,9 @@ maveoconnect_lb_page_start('log', $logExtraCss);
 
 echo '<div class="mc-plugin-container">';
 echo maveoconnect_plugin_header_bar();
-echo '<p class="mc-settings-intro" style="margin-bottom:4px;"><strong>Dauerhaftes Protokoll</strong> des Maveo-Daemon (aktuell aktiv: Log-Level unter Einstellungen → Entwicklung). Die Seite fragt etwa jede Sekunde nach neuen Zeilen.</p>';
-echo '<p class="mc-log-meta">Schnelle Torbewegungen und MQTT stehen zusätzlich live unter „Status&nbsp;&amp; Steuerung“.</p>';
-echo '<p class="mc-log-tip"><strong>Hinweis:</strong> Für mehr Details dort Log-Level auf <code>debug</code> setzen, Daemon neu starten — dann siehst du u.&nbsp;a. BlueFi/Zustände hier.</p>';
+echo '<p class="mc-settings-intro" style="margin-bottom:4px;">' . htmlspecialchars(mc_t('LOG', 'BODY_LEAD', 'Rolling excerpt from the Maveo daemon log (active log level under Settings → Advanced → Daemon log). This page fetches new lines about once per second.'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<p class="mc-log-meta">' . htmlspecialchars(mc_t('LOG', 'BODY_META', 'Live door movement and MQTT also appear on “Status & control”.'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<p class="mc-log-tip">' . htmlspecialchars(mc_t('LOG', 'TIP', 'Tip: for more detail set the level to “debug”, save settings, and restart the daemon — BlueFi and state lines will show up here.'), ENT_QUOTES, 'UTF-8') . '</p>';
 echo '<pre id="mc_log_panel" class="mc-log-box" role="log" aria-live="polite"></pre>';
 echo '<script>(function(){';
 echo 'var panel=document.getElementById("mc_log_panel");';

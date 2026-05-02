@@ -26,8 +26,10 @@ PLUGINNAME="maveoconnect"
 # LBHOMEDIR without baking any literal install path into the file.
 if [ -z "${LBHOMEDIR:-}" ]; then
   LBHOMEDIR=$(cd "$(dirname "$0")/../../.." && pwd)
-  export LBHOMEDIR
 fi
+# Always export so the Node daemon can read MQTT Gateway cred.json under
+# $LBHOMEDIR/config/plugins/mqttgateway/ even when LBHOMEDIR was inherited unexported.
+export LBHOMEDIR
 
 # loxberry.sh is the canonical helper that exports LBP*/LBS* env vars.
 if [ -f "$LBHOMEDIR/libs/bashlib/loxberry.sh" ]; then

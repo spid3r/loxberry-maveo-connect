@@ -1,8 +1,12 @@
-import mqtt, { type MqttClient } from "mqtt";
+import mqtt, { type IClientOptions, type MqttClient } from "mqtt";
 import type { PluginSettings } from "./settings.js";
 import type { Logger } from "./logger.js";
 import type { MaveoDoorPosition } from "maveo-connect-stick-client";
 import { maveoDoorPositionLabel } from "maveo-connect-stick-client";
+
+/** MQTT.js default reconnect is 1s → log spam + broker hammering when auth fails. */
+const FORWARD_RECONNECT_MS = 30_000;
+const FORWARD_ERROR_WARN_INTERVAL_MS = 60_000;
 
 export class MqttForwarder {
   private client: MqttClient | undefined;
@@ -10,6 +14,10 @@ export class MqttForwarder {
   private log: Logger;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private pending: { door?: MaveoDoorPosition; light?: boolean } = {};
+  /** Throttle identical forward errors: one WARN per minute, counts between. */
+  private forwardErrorThrottle:
+    | { signature: string; windowStartMs: number; hitsInWindow: number; lastWarnMs: number }
+    | undefined;
 
   constructor(log: Logger) {
     this.log = log;
@@ -35,23 +43,56 @@ export class MqttForwarder {
     }
 
     this.disconnect();
-    const opts: Parameters<typeof mqtt.connect>[1] = {};
+    this.forwardErrorThrottle = undefined;
+
+    const opts: IClientOptions = {
+      reconnectPeriod: FORWARD_RECONNECT_MS,
+      connectTimeout: 15_000,
+    };
     if (mf?.username) opts.username = mf.username;
     if (mf?.password) opts.password = mf.password;
 
     try {
       this.client = mqtt.connect(url, opts);
       this.client.on("connect", () => {
+        this.forwardErrorThrottle = undefined;
         this.log.info("MQTT forward: connected to local broker", { url });
       });
       this.client.on("error", (e) => {
-        this.log.warn("MQTT forward: error", { message: String(e) });
+        this.logForwardBrokerError(String(e));
       });
       this.client.on("close", () => {
         this.log.debug("MQTT forward: connection closed");
       });
     } catch (e) {
       this.log.error("MQTT forward: connect failed", { error: String(e) });
+    }
+  }
+
+  private logForwardBrokerError(message: string) {
+    const now = Date.now();
+    const t = this.forwardErrorThrottle;
+    if (!t || t.signature !== message) {
+      this.forwardErrorThrottle = {
+        signature: message,
+        windowStartMs: now,
+        hitsInWindow: 1,
+        lastWarnMs: now,
+      };
+      this.log.warn("MQTT forward: error", { message });
+      return;
+    }
+    t.hitsInWindow += 1;
+    if (now - t.lastWarnMs >= FORWARD_ERROR_WARN_INTERVAL_MS) {
+      const elapsedSec = Math.max(1, Math.round((now - t.windowStartMs) / 1000));
+      this.log.warn("MQTT forward: error (still failing)", {
+        message,
+        attemptsSinceLastSummary: t.hitsInWindow,
+        elapsedSecondsApprox: elapsedSec,
+      });
+      t.lastWarnMs = now;
+      t.windowStartMs = now;
+      t.hitsInWindow = 0;
     }
   }
 
@@ -97,15 +138,9 @@ export class MqttForwarder {
       if (light !== undefined) {
         c.publish(`${p}/light_on`, light ? "1" : "0", { qos: 0, retain: false });
       }
-      if (door !== undefined || light !== undefined) {
-        const state: Record<string, string | number | boolean> = { ts: Date.now() };
-        if (door !== undefined) {
-          state.door_position = door;
-          state.door_label = maveoDoorPositionLabel(door);
-        }
-        if (light !== undefined) state.light_on = light;
-        c.publish(`${p}/state`, JSON.stringify(state), { qos: 0, retain: false });
-      }
+      /** No combined `<prefix>/state` JSON: LoxBerry MQTT Gateway “expand JSON” turns that
+       *  into duplicate flat topics (e.g. `…_door##_label`) alongside the clean `door_label`
+       *  topic — same values twice. Granular topics above are enough for Loxone/subscribers. */
     } catch (e) {
       this.log.warn("MQTT forward: publish failed", { error: String(e) });
     }

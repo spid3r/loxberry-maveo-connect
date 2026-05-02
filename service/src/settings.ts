@@ -1,5 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { MAVEO_DEFAULT_STACK } from "./maveoStackDefaults.js";
+import { loadLoxBerryBrokerCredentials } from "./loxberryMqttCredentials.js";
 
 export type LogLevelName = "error" | "warn" | "info" | "debug";
 
@@ -47,6 +49,90 @@ export type PluginSettings = {
   };
 };
 
+/** Same broker URL as “LoxBerry broker” in the web UI (`127.0.0.1:1883` / `localhost:1883`). */
+function isLoxberryLocalMqttBrokerUrl(raw: string | undefined): boolean {
+  const u = (raw ?? "").trim().toLowerCase();
+  if (!u) return false;
+  const m = /^mqtts?:\/\/([^/:]+)(?::(\d+))?$/i.exec(u);
+  if (!m) return false;
+  const host = m[1].toLowerCase();
+  const port = m[2] ? parseInt(m[2], 10) : 1883;
+  return (host === "127.0.0.1" || host === "localhost") && port === 1883;
+}
+
+/**
+ * `.../config/plugins/<plugin>/settings.json` → LoxBerry root (parent of `config/`).
+ * Used when `LBHOMEDIR` is missing from the environment but `MAVOECONNECT_CONFIG` is set
+ * (some init contexts export only the latter).
+ */
+export function inferLbHomeFromMaveoConfigEnv(): string | undefined {
+  const cfg = process.env.MAVOECONNECT_CONFIG?.trim();
+  if (!cfg) return undefined;
+  let d = cfg;
+  for (let i = 0; i < 4; i++) {
+    const p = dirname(d);
+    if (p === d) return undefined;
+    d = p;
+  }
+  return d;
+}
+
+export function resolveLbHomeForMqttGateway(): string | undefined {
+  const fromEnv = process.env.LBHOMEDIR?.trim();
+  if (fromEnv) return fromEnv;
+  const inferred = inferLbHomeFromMaveoConfigEnv();
+  if (inferred) return inferred;
+  /** Same default as loxberry-api-abfall-io when env is missing on a real appliance. */
+  if (existsSync("/opt/loxberry")) return "/opt/loxberry";
+  return undefined;
+}
+
+/**
+ * When forwarding to local Mosquitto (`127.0.0.1:1883`), fill broker user/password from
+ * LoxBerry system MQTT config — same resolution order as loxberry-api-abfall-io
+ * (`general.json` → several `cred.json` paths → `general.cfg`). Stale wrong values in
+ * `settings.json` are replaced when the detected pair has both user and password.
+ */
+export function augmentMqttForwardWithLoxberryGatewayCreds(settings: PluginSettings): PluginSettings {
+  const mf = settings.mqttForward;
+  if (!mf?.enabled) return settings;
+  const brokerUrl = mf.brokerUrl?.trim() || "mqtt://127.0.0.1:1883";
+  if (!isLoxberryLocalMqttBrokerUrl(brokerUrl)) return settings;
+
+  const lbHome = resolveLbHomeForMqttGateway();
+  if (!lbHome) return settings;
+
+  const detected = loadLoxBerryBrokerCredentials(lbHome);
+  if (!detected) return settings;
+
+  const user = mf.username?.trim() ?? "";
+  const pass = mf.password?.trim() ?? "";
+
+  const du = detected.user.trim();
+  const dp = detected.password.trim();
+
+  let nextUser: string;
+  let nextPass: string;
+  if (du !== "" && dp !== "") {
+    nextUser = du;
+    nextPass = dp;
+  } else {
+    nextUser = user || du;
+    nextPass = pass || dp;
+  }
+
+  if (nextUser === (mf.username ?? "") && nextPass === (mf.password ?? "")) return settings;
+
+  return {
+    ...settings,
+    mqttForward: {
+      ...mf,
+      username: nextUser,
+      password: nextPass,
+    },
+  };
+}
+
 const defaultSettings = (): PluginSettings => ({
   general: { language: "" },
   maveo: {
@@ -86,7 +172,8 @@ export function loadSettingsFile(path: string): PluginSettings {
   }
   const raw = readFileSync(path, "utf8");
   const parsed = JSON.parse(raw) as Partial<PluginSettings>;
-  return normalizeMaveoAuthDefaults(deepMerge(base, parsed));
+  const merged = normalizeMaveoAuthDefaults(deepMerge(base, parsed));
+  return augmentMqttForwardWithLoxberryGatewayCreds(merged);
 }
 
 /**

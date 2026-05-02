@@ -154,10 +154,12 @@ When **MQTT forward** is enabled in *Settings → Advanced settings*, the daemon
 
 ```text
 <prefix>/door_position   ← door position code (integer 0…6, Maveo / BlueFi encoding)
-<prefix>/door_label     ← English status token from the stick client (e.g. closed, open)
+<prefix>/door_label      ← English status token from the stick client (e.g. closed, open)
 <prefix>/light_on        ← "1" or "0"
-<prefix>/state           ← JSON snapshot: { "door_position"?, "door_label"?, "light_on"?, "ts": <ms> }
 ```
+
+There is **no** combined `<prefix>/state` JSON topic: publishing it duplicated the same
+values when the LoxBerry MQTT Gateway expands JSON into extra flat topics (`##` in names).
 
 There are **no external CDN libraries** in the plugin web UI — only embedded CSS/JS and LoxBerry shell assets.
 
