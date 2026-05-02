@@ -178,7 +178,7 @@ if (!fs.existsSync(zip)) {
 run('git config user.email "semantic-release-bot@martynus.net"');
 run('git config user.name "semantic-release-bot"');
 
-run("git add CHANGELOG.md plugin.cfg package.json prerelease.cfg docs/WIKI_DOKUWIKI_START.txt");
+run("git add CHANGELOG.md plugin.cfg package.json service/package.json prerelease.cfg docs/WIKI_DOKUWIKI_START.txt");
 run(`git commit -m "chore(release): ${nextVersion} [skip ci]"`);
 run(`git tag ${tagName}`);
 run("git push origin HEAD:beta");

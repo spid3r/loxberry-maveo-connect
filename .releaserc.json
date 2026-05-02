@@ -33,7 +33,7 @@
           "CHANGELOG.md",
           "plugin.cfg",
           "package.json",
-          "daemon/package.json",
+          "service/package.json",
           "release.cfg",
           "prerelease.cfg",
           "docs/WIKI_DOKUWIKI_START.txt"
