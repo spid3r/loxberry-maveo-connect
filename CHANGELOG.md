@@ -18,3 +18,4 @@ Also in this line:
 - Settings UI: Loxone / MQTT integration help (same broker as LoxBerry IP, latency, no commands in); LoxBerry-broker hint text; log page fully i18n.
 - Daemon: optional `debug` logging for stick/MQTT forward behaviour (existing log level control).
 - Docs & compliance: bilingual **DISCLAIMER.md** (community project, not official Marantec/Maveo, cloud/API may change anytime); README + DokuWiki template + overview UI link to it.
+
