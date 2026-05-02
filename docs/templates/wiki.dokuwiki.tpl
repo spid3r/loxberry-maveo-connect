@@ -33,7 +33,7 @@ Voraussetzung: **LoxBerry ab Version 3.x**. ZIP unter **System → Plugins** ins
 
   * **HTTP‑API des Daemons** (nur von localhost / mit Token): Port und Host in den Einstellungen; das Token wird vom Plugin in ''api_token.txt'' gespeichert.
 
-  * **MQTT‑Weiterleitung**: optional Broker‑URL, Topic‑Präfix, Benutzer/Passwort.
+  * **MQTT‑Weiterleitung**: optional Broker‑URL, Topic‑Präfix; bei **LoxBerry‑Broker** (127.0.0.1:1883) ermittelt der Daemon Zugangsdaten wie das MQTT‑System (''general.json'' / ''cred.json''‑Pfade) — siehe Hilfetext in den Einstellungen.
 
   * **Erweiterte MQTT‑Sitzung**: Verhalten bei „App vs. Plugin“ (Session‑Contention / Reclaim) ist in der Library dokumentiert; die Standardeinstellungen sind für die meisten Installationen sinnvoll.
 
@@ -43,7 +43,7 @@ Voraussetzung: **LoxBerry ab Version 3.x**. ZIP unter **System → Plugins** ins
 
 ===== MQTT-Weiterleitung =====
 
-Nach Aktivierung in den Einstellungen publiziert der Daemon Zustandsänderungen (Türposition, Licht) unter dem konfigurierten **Topic‑Präfix** — Details siehe README im Repository.
+Nach Aktivierung in den Einstellungen publiziert der Daemon **nicht‑retained** Nachrichten unter dem **Topic‑Präfix** mit den Endungen ''door_position'', ''door_label'' und ''light_on'' (Klartext bzw. Zahlencode — **kein** kombiniertes JSON‑Sammeltopic, damit das LoxBerry‑MQTT‑Gateway keine doppelten flachen Namen mit ''#''‑Escapes erzeugt). Details und Loxone‑Hinweise: README im Repository und Tab **Einstellungen** im Plugin.
 
 ===== HTTP-Daemon (intern) =====
 

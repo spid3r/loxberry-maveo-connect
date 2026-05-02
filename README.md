@@ -55,7 +55,7 @@ your own risk.
   (US-prod, US-test, EU-prod, EU-test) — **probe before save** lets you try EU vs US
   without committing a wrong config.
 - **Live status & control** of door position and light from the *Status* tab (browser polls the daemon about every **2 seconds** — no WebSockets required on stock LoxBerry).
-- **Optional MQTT forward** to Loxone or another broker (LoxBerry Mosquitto auto-detect).
+- **Optional MQTT forward** to Loxone or another broker: on **LoxBerry Mosquitto** (127.0.0.1:1883) the daemon resolves broker credentials the same way as [loxberry-api-abfall-io](https://github.com/spid3r/loxberry-api-abfall-io) (`general.json` / `cred.json` probe paths); three clean topics only (`door_position`, `door_label`, `light_on`).
 - **LoxBerry-canonical daemon lifecycle** (LSB init script in `daemon/daemon`, sudoers
   for rootless restart, automatic restart-on-`Connection refused` from the PHP UI).
 - **No hardcoded `/opt/loxberry` paths** in shell hooks: install/uninstall/sudoers use
@@ -67,18 +67,40 @@ your own risk.
 
 ## Screenshots (admin UI)
 
-German admin previews live under `docs/wiki-assets/`. They are captured
-**automatically** with Playwright against a real LoxBerry appliance — see
+Admin previews (**German and English**) live under [`docs/wiki-assets/`](./docs/wiki-assets/)
+(`maveoconnect-overview-{de,en}.png`, `maveoconnect-status-{de,en}.png`, `maveoconnect-settings-{de,en}.png`).
+They are captured **automatically** with Playwright against a real LoxBerry appliance — see
 `npm run wiki:screenshots` (sets `E2E_LIVE=1` for that run — see [`scripts/wiki-screenshots.mjs`](./scripts/wiki-screenshots.mjs)),
 `npm run wiki:screenshots:headed` to watch Chromium, or `npm run wiki:screenshots:ui` for the Playwright UI mode.
+The generated DokuWiki page embeds the **German** trio by default; English assets ship in-repo for bilingual wikis — same layout as [`docs/WIKI_DOKUWIKI_START.txt`](./docs/WIKI_DOKUWIKI_START.txt) / `npm run wiki:generate`.
 Full destructive E2E: [`scripts/run-e2e-full.mjs`](./scripts/run-e2e-full.mjs).
+
+### German (DE)
+
+<p align="center">
+  <img src="docs/wiki-assets/maveoconnect-overview-de.png" width="820" alt="Maveo Connect — Overview tab (German)" />
+</p>
 
 <p align="center">
   <img src="docs/wiki-assets/maveoconnect-status-de.png" width="820" alt="Maveo Connect — Status tab (German)" />
 </p>
 
 <p align="center">
-  <img src="docs/wiki-assets/maveoconnect-overview-de.png" width="820" alt="Maveo Connect — Overview tab (German)" />
+  <img src="docs/wiki-assets/maveoconnect-settings-de.png" width="820" alt="Maveo Connect — Settings tab with Loxone/MQTT help (German)" />
+</p>
+
+### English (EN)
+
+<p align="center">
+  <img src="docs/wiki-assets/maveoconnect-overview-en.png" width="820" alt="Maveo Connect — Overview tab (English)" />
+</p>
+
+<p align="center">
+  <img src="docs/wiki-assets/maveoconnect-status-en.png" width="820" alt="Maveo Connect — Status tab (English)" />
+</p>
+
+<p align="center">
+  <img src="docs/wiki-assets/maveoconnect-settings-en.png" width="820" alt="Maveo Connect — Settings tab with Loxone/MQTT help (English)" />
 </p>
 
 ## How it works
@@ -137,8 +159,9 @@ is dead).
 Inside the *Erweiterte Einstellungen / Advanced settings* `<details>` block:
 
 - **Sprache / Language** — pin the admin UI language in `settings.json`
-- **MQTT forward** to a local broker (LoxBerry Mosquitto auto-detect or custom host,
-  topic prefix, optional user/pass)
+- **MQTT forward** to a local broker (LoxBerry Mosquitto **127.0.0.1:1883** or custom host,
+  topic prefix; on the LoxBerry broker the daemon **auto-resolves** credentials like
+  [loxberry-api-abfall-io](https://github.com/spid3r/loxberry-api-abfall-io) from `general.json` / `cred.json` paths — see the in-app hint under **Use LoxBerry broker**)
 - **Cognito Identity Pool**, **Client ID**, **AWS region**, **IoT test endpoints** —
   for **EU** and/or **test** stack accounts that don't match the library defaults
   (`us-west-2 prod`)

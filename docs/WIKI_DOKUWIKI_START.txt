@@ -1,6 +1,13 @@
 ====== Maveo Connect / Marantec (Connect Stick over MQTT) ======
 
 ++++ Version History |
+**Version 1.1.0**
+
+  * MQTT forward: resolve broker credentials like **loxberry-api-abfall-io** (''general.json'' Mqtt, then ''cred.json'' paths under ''$LBHOMEDIR''); prefer gateway pair on local broker; infer ''$LBHOMEDIR'' from ''MAVOECONNECT_CONFIG'' when needed; export ''LBHOMEDIR'' in init script for Node.
+  * MQTT forward: throttle repeated broker errors; slower reconnect; publish only topic-prefix branches ''door_position'', ''door_label'', ''light_on'' (no aggregate JSON topic ''state'' — avoids duplicate ''##'' names when LoxBerry MQTT Gateway expands JSON).
+  * Settings UI: Loxone / MQTT integration help (same broker as LoxBerry IP, latency, no commands in); LoxBerry-broker hint text; log page fully i18n.
+  * Daemon: optional ''debug'' logging for stick/MQTT forward behaviour (existing log level control).
+
 **Version 1.0.3**
 
   * CI, semantic‑release ZIP assets, wiki generation, Dependabot (parity with sibling LoxBerry plugins).
@@ -36,17 +43,21 @@ Voraussetzung: **LoxBerry ab Version 3.x**. ZIP unter **System → Plugins** ins
 
   * **HTTP‑API des Daemons** (nur von localhost / mit Token): Port und Host in den Einstellungen; das Token wird vom Plugin in ''api_token.txt'' gespeichert.
 
-  * **MQTT‑Weiterleitung**: optional Broker‑URL, Topic‑Präfix, Benutzer/Passwort.
+  * **MQTT‑Weiterleitung**: optional Broker‑URL, Topic‑Präfix; bei **LoxBerry‑Broker** (127.0.0.1:1883) ermittelt der Daemon Zugangsdaten wie das MQTT‑System (''general.json'' / ''cred.json''‑Pfade) — siehe Hilfetext in den Einstellungen.
 
   * **Erweiterte MQTT‑Sitzung**: Verhalten bei „App vs. Plugin“ (Session‑Contention / Reclaim) ist in der Library dokumentiert; die Standardeinstellungen sind für die meisten Installationen sinnvoll.
 
 ===== Screenshots =====
 
-  * (Keine Screenshots im Repository eingecheckt — siehe Releases.)
+  * Plugin‑Oberfläche (DE, Beispiel):
+{{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/maveoconnect-overview-de.png?820|Übersicht}}
+{{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/maveoconnect-status-de.png?820|Live‑Status mit Tor‑Symbol}}
+{{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/maveoconnect-settings-de.png?820|Einstellungen inkl. Loxone/MQTT‑Hinweis}}
+  * EN‑Varianten der gleichen Seiten liegen als ''maveoconnect-*-en.png'' unter ''docs/wiki-assets/'' im Repository (für zweisprachige Wikis).
 
 ===== MQTT-Weiterleitung =====
 
-Nach Aktivierung in den Einstellungen publiziert der Daemon Zustandsänderungen (Türposition, Licht) unter dem konfigurierten **Topic‑Präfix** — Details siehe README im Repository.
+Nach Aktivierung in den Einstellungen publiziert der Daemon **nicht‑retained** Nachrichten unter dem **Topic‑Präfix** mit den Endungen ''door_position'', ''door_label'' und ''light_on'' (Klartext bzw. Zahlencode — **kein** kombiniertes JSON‑Sammeltopic, damit das LoxBerry‑MQTT‑Gateway keine doppelten flachen Namen mit ''#''‑Escapes erzeugt). Details und Loxone‑Hinweise: README im Repository und Tab **Einstellungen** im Plugin.
 
 ===== HTTP-Daemon (intern) =====
 
