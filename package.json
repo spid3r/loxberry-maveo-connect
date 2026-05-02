@@ -1,22 +1,80 @@
 {
   "name": "loxberry-maveo-connect",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "service"
+  ],
   "description": "LoxBerry 3 plugin: Maveo Connect garage (Node daemon + PHP UI)",
   "scripts": {
-    "icons": "node scripts/generate-icons.mjs",
-    "build:client": "npm ci --prefix maveo-connect-stick-client && npm run build --prefix maveo-connect-stick-client",
-    "build:daemon": "npm ci --prefix daemon && npm run build --prefix daemon",
-    "build": "npm run build:client && npm run build:daemon",
-    "pack": "node scripts/package-zip.mjs"
+    "prepare": "husky",
+    "postinstall": "node ./scripts/postinstall-stick-client.mjs",
+    "build:icons": "node ./scripts/resize-plugin-icons.mjs",
+    "build": "npm run build --workspace=maveoconnect-service",
+    "clean": "node -e \"import('node:fs').then((m)=>{m.rmSync('dist',{recursive:true,force:true});m.rmSync('dist-staging',{recursive:true,force:true});})\"",
+    "typecheck": "npm run typecheck --workspace=maveoconnect-service && tsc -p test-ts/tsconfig.json --noEmit && tsc -p test-e2e/tsconfig.json --noEmit",
+    "test": "npx tsx node_modules/mocha/bin/mocha.js \"test-ts/**/*.spec.ts\"",
+    "test:watch": "npx tsx node_modules/mocha/bin/mocha.js \"test-ts/**/*.spec.ts\" --watch",
+    "coverage": "c8 npm test",
+    "release:zip": "npm run build:icons && node ./scripts/build-release.mjs",
+    "verify:zip": "node ./scripts/verify-plugin-zip.mjs",
+    "verify": "npm run typecheck && npm test && npm run release:zip && npm run verify:zip",
+    "wiki:generate": "node ./scripts/generate-wiki-doc.mjs",
+    "wiki:validate": "node ./scripts/validate-wiki-doc.mjs",
+    "wiki:build": "npm run wiki:generate && npm run wiki:validate",
+    "wiki:screenshots": "dotenv -e .env -- npx playwright test test-e2e/live-status.spec.ts --grep \"wiki-asset screenshots\"",
+    "test:playwright": "dotenv -e .env -- npx playwright test test-e2e",
+    "test:all": "npm run verify && npm run test:playwright",
+    "lb:cli": "dotenv -e .env -- npx loxberry-client",
+    "plugins:list": "npm run lb:cli -- plugins list",
+    "plugins:deploy": "dotenv -e .env -- npx loxberry-client plugins deploy --project .",
+    "plugins:upload:latest": "npm run plugins:deploy",
+    "plugins:uninstall": "dotenv -e .env -- npx loxberry-client plugins uninstall --name maveoconnect",
+    "test:live": "npm run release:zip && npm run plugins:upload:latest",
+    "test:e2e:full": "dotenv -e .env -- node ./scripts/run-e2e-full.mjs",
+    "test:e2e:full:go": "dotenv -e .env -- node ./scripts/run-e2e-full.mjs --yes-i-am-developer",
+    "link:maveo": "node ./scripts/link-maveo-client.mjs",
+    "release:dry-run": "semantic-release --dry-run",
+    "release:beta": "node ./scripts/beta-release.mjs"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/spid3r/loxberry-maveo-connect.git"
   },
+  "author": "Thorsten Wolf",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/spid3r/loxberry-maveo-connect/issues"
+  },
+  "homepage": "https://github.com/spid3r/loxberry-maveo-connect#readme",
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
-    "archiver": "^7.0.1"
+    "@commitlint/cli": "^20.5.2",
+    "@commitlint/config-conventional": "^20.5.0",
+    "@playwright/test": "^1.59.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.6",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.6.0",
+    "archiver": "^7.0.1",
+    "c8": "^11.0.0",
+    "chai": "^6.2.2",
+    "dotenv-cli": "^11.0.0",
+    "husky": "^9.1.7",
+    "loxberry-client-library": "^1.2.0",
+    "mocha": "^11.7.5",
+    "semantic-release": "^25.0.3",
+    "semver": "^7.7.4",
+    "sharp": "^0.34.5",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
   }
 }

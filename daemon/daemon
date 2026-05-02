@@ -1,0 +1,196 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          maveoconnect
+# Required-Start:    $remote_fs $syslog $network
+# Required-Stop:     $remote_fs $syslog $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Maveo Connect daemon (Marantec garage door integration)
+# Description:       Long-running Node service that bridges the Marantec Maveo Connect
+#                    Stick (AWS Cognito + IoT MQTT) to the LoxBerry web UI on
+#                    127.0.0.1:47832 (token-protected). Reload settings.json with
+#                    `<this> reload` (sends SIGHUP) — no full restart needed.
+### END INIT INFO
+
+# Installed by LoxBerry under $LBHOMEDIR/system/daemons/plugins/<NAME> (renamed from
+# daemon/daemon during plugin install). Started at boot as root via init/systemd.
+# The plugin web UI may also call this script via `sudo` (see sudoers/sudoers).
+
+set -u
+
+PLUGINNAME="maveoconnect"
+
+# LoxBerry sets LBHOMEDIR/LBPBIN/LBPCONFIG/LBPLOG via /etc/environment; if missing
+# (cron.d, manual invocation) we resolve it from this script's location, which lives
+# at $LBHOMEDIR/system/daemons/plugins/<NAME>. Walking up three levels gives us
+# LBHOMEDIR without baking any literal install path into the file.
+if [ -z "${LBHOMEDIR:-}" ]; then
+  LBHOMEDIR=$(cd "$(dirname "$0")/../../.." && pwd)
+  export LBHOMEDIR
+fi
+
+# loxberry.sh is the canonical helper that exports LBP*/LBS* env vars.
+if [ -f "$LBHOMEDIR/libs/bashlib/loxberry.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$LBHOMEDIR/libs/bashlib/loxberry.sh" >/dev/null 2>&1 || true
+fi
+
+LBPBIN="${LBPBIN:-$LBHOMEDIR/bin/plugins}"
+LBPCONFIG="${LBPCONFIG:-$LBHOMEDIR/config/plugins}"
+LBPLOG="${LBPLOG:-$LBHOMEDIR/log/plugins}"
+
+CONFIGDIR="$LBPCONFIG/$PLUGINNAME"
+LOGDIR="$LBPLOG/$PLUGINNAME"
+BINDIR="$LBPBIN/$PLUGINNAME"
+SERVICE_JS="$BINDIR/service.mjs"
+
+# PIDFILE in plugin log dir (writable by both root + loxberry user — survives reboot).
+PIDFILE="$LOGDIR/daemon.pid"
+SHELL_LOG="$LOGDIR/daemon.shell.log"
+
+mkdir -p "$CONFIGDIR" "$LOGDIR" 2>/dev/null || true
+chown -R loxberry:loxberry "$LOGDIR" 2>/dev/null || true
+
+# Locate node binary. LoxBerry images prefer /usr/bin/node; degrade gracefully when
+# postroot runs with a stripped PATH (some installer contexts) or on minimal images.
+if [ -z "${NODE_BIN:-}" ] || [ ! -x "$NODE_BIN" ]; then
+  if command -v node >/dev/null 2>&1; then
+    NODE_BIN="$(command -v node)"
+  elif [ -x /usr/bin/node ]; then
+    NODE_BIN=/usr/bin/node
+  elif [ -x "$LBHOMEDIR/system/nodejs/bin/node" ]; then
+    NODE_BIN="$LBHOMEDIR/system/nodejs/bin/node"
+  else
+    NODE_BIN=/usr/bin/node
+  fi
+fi
+
+export MAVOECONNECT_CONFIG="$CONFIGDIR/settings.json"
+export MAVOECONNECT_LOGDIR="$LOGDIR"
+export MAVOECONNECT_SECRET="$CONFIGDIR/api_token.txt"
+export MAVOECONNECT_PLUGIN_DIR="$BINDIR"
+
+shell_log() {
+  printf '%s %s\n' "$(date -Iseconds)" "$*" >>"$SHELL_LOG" 2>/dev/null || true
+}
+
+is_running() {
+  if [ ! -f "$PIDFILE" ]; then
+    return 1
+  fi
+  local p
+  p=$(cat "$PIDFILE" 2>/dev/null || echo "")
+  if [ -z "$p" ]; then
+    return 1
+  fi
+  if kill -0 "$p" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+current_pid() {
+  if is_running; then
+    cat "$PIDFILE"
+  else
+    echo ""
+  fi
+}
+
+service_start() {
+  if is_running; then
+    echo "Maveo Connect daemon already running (pid $(current_pid))"
+    return 0
+  fi
+  rm -f "$PIDFILE" 2>/dev/null || true
+
+  if [ ! -f "$SERVICE_JS" ]; then
+    echo "Maveo Connect: missing $SERVICE_JS — reinstall the plugin ZIP."
+    shell_log "ERROR: missing $SERVICE_JS"
+    return 1
+  fi
+  if [ ! -x "$NODE_BIN" ]; then
+    echo "Maveo Connect: node not found (looked at \$NODE_BIN, /usr/bin/node, \$LBHOMEDIR/system/nodejs/bin/node)."
+    shell_log "ERROR: node binary missing"
+    return 1
+  fi
+
+  shell_log "LOGSTART node_bin=$NODE_BIN service=$SERVICE_JS user=$(id -un)"
+  cd "$BINDIR" || return 1
+  # Detach properly — survives loss of the controlling terminal (postroot, ssh, etc.).
+  nohup "$NODE_BIN" "$SERVICE_JS" </dev/null >>"$SHELL_LOG" 2>&1 &
+  local pid=$!
+  echo "$pid" >"$PIDFILE"
+  chmod 0644 "$PIDFILE" 2>/dev/null || true
+  # Make the pid file writable by loxberry so non-root restart works (sudo path is
+  # also covered by sudoers/sudoers but a writable pid keeps stop idempotent).
+  chown loxberry:loxberry "$PIDFILE" 2>/dev/null || true
+
+  # Catch immediate crashes (esbuild bundle errors, missing api_token.txt etc.) so
+  # the WebUI's "Daemon neu starten" returns a useful error instead of silently
+  # claiming success when Node died within milliseconds.
+  sleep 1
+  if ! kill -0 "$pid" 2>/dev/null; then
+    rm -f "$PIDFILE" 2>/dev/null || true
+    echo "Maveo Connect daemon crashed within 1s — last 20 lines of $SHELL_LOG:"
+    tail -n 20 "$SHELL_LOG" 2>/dev/null || true
+    shell_log "ERROR: process exited within 1s"
+    return 1
+  fi
+  echo "Maveo Connect daemon started pid $pid"
+}
+
+service_stop() {
+  if [ ! -f "$PIDFILE" ]; then
+    # Last-resort sweep — covers stale processes after a crash without pidfile.
+    pkill -f "$SERVICE_JS" 2>/dev/null || true
+    echo "Maveo Connect daemon not running (no pidfile)"
+    return 0
+  fi
+  local pid
+  pid=$(cat "$PIDFILE" 2>/dev/null || true)
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    sleep 1
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  fi
+  rm -f "$PIDFILE"
+  shell_log "LOGEND"
+  echo "Maveo Connect daemon stopped"
+}
+
+service_reload() {
+  if ! is_running; then
+    echo "Maveo Connect daemon not running; starting instead of reload"
+    service_start
+    return $?
+  fi
+  local pid
+  pid=$(current_pid)
+  kill -HUP "$pid" 2>/dev/null || return 1
+  echo "Maveo Connect daemon reloaded (pid $pid)"
+}
+
+service_status() {
+  if is_running; then
+    echo "running pid $(current_pid)"
+    return 0
+  fi
+  echo "stopped"
+  return 3
+}
+
+case "${1:-}" in
+  start)   service_start || exit $? ;;
+  stop)    service_stop ;;
+  restart) service_stop; sleep 1; service_start || exit $? ;;
+  reload)  service_reload ;;
+  status)  service_status ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|reload|status}"
+    exit 1
+    ;;
+esac
+exit 0

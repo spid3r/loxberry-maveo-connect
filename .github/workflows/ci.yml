@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Checkout maveo-connect-stick-client (sources for npm link step)
+        uses: actions/checkout@v6
+        with:
+          repository: spid3r/maveo-connect-stick-client
+          path: maveo-connect-stick-client
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          HUSKY: "0"
+
+      - name: Commitlint (conventional commits)
+        if: github.event_name == 'push'
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            npx commitlint --last --verbose
+          else
+            npx commitlint --from=${{ github.event.before }} --to=${{ github.event.after }} --verbose
+          fi
+
+      - name: Commitlint (PR head commit)
+        if: github.event_name == 'pull_request'
+        run: npx commitlint --last --verbose
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests (Mocha)
+        run: npm test
+
+      - name: Build runtime
+        run: npm run build
+
+      - name: Build release zip
+        run: npm run release:zip
+
+      - name: Verify ZIP contents
+        run: npm run verify:zip
+
+      - name: Wiki generate & validate
+        run: npm run wiki:build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright
+        run: npm run test:playwright

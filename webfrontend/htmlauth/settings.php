@@ -1,6 +1,53 @@
 <?php
 require_once __DIR__ . '/loxberry_bootstrap.php';
 require_once __DIR__ . '/maveo_paths.php';
+require_once __DIR__ . '/maveo_ui.php';
+
+/** @return array<string,mixed> */
+function maveoconnect_probe_payload_from_request(): array
+{
+    $out = ['maxThings' => 120];
+    $raw = file_get_contents('php://input');
+    $in = json_decode($raw ?: '{}', true);
+    if (!is_array($in)) {
+        return $out;
+    }
+    if (!empty($in['email']) && is_string($in['email'])) {
+        $out['email'] = $in['email'];
+    }
+    if (array_key_exists('password', $in) && is_string($in['password'])) {
+        $out['password'] = $in['password'];
+    }
+    $mx = isset($in['maxThings']) ? (int) $in['maxThings'] : 0;
+    if ($mx >= 1 && $mx <= 250) {
+        $out['maxThings'] = $mx;
+    }
+    foreach (['cognitoIdentityPoolId', 'cognitoClientId', 'region', 'iotHostname', 'mqttWssSigning'] as $k) {
+        if (!empty($in[$k]) && is_string($in[$k])) {
+            $out[$k] = $in[$k];
+        }
+    }
+    if (array_key_exists('useTestEndpoints', $in)) {
+        $v = $in['useTestEndpoints'];
+        $out['useTestEndpoints'] = $v === true || $v === 1 || $v === '1' || $v === 'true';
+    }
+
+    return $out;
+}
+
+if (!empty($_GET['ajax_probe']) && strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $r = maveoconnect_daemon_request('POST', '/api/maveo/probe', maveoconnect_probe_payload_from_request());
+    echo json_encode($r);
+    exit;
+}
+
+if (!empty($_GET['ajax_things'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $r = maveoconnect_daemon_request('POST', '/api/maveo/probe', ['maxThings' => 120]);
+    echo json_encode($r);
+    exit;
+}
 
 $msg = '';
 $error = '';
@@ -17,27 +64,32 @@ function maveoconnect_ensure_config_dir(): bool
     return true;
 }
 
-function maveoconnect_ensure_api_token(): void
+/** @return array{0:string,1:int} host, port */
+function maveoconnect_parse_mqtt_url(string $url): array
 {
-    global $MAVOECONNECT_API_TOKEN_FILE;
-    if ($MAVOECONNECT_API_TOKEN_FILE === '') {
-        return;
+    $host = '127.0.0.1';
+    $port = 1883;
+    if (preg_match('#^mqtts?://([^:/]+)(?::(\d+))?#i', $url, $m)) {
+        $host = $m[1];
+        if (!empty($m[2])) {
+            $port = max(1, min(65535, (int) $m[2]));
+        }
     }
-    if (file_exists($MAVOECONNECT_API_TOKEN_FILE)) {
-        return;
-    }
-    if (function_exists('random_bytes')) {
-        $t = bin2hex(random_bytes(32));
-    } else {
-        $t = bin2hex(openssl_random_pseudo_bytes(32));
-    }
-    file_put_contents($MAVOECONNECT_API_TOKEN_FILE, $t);
-    @chmod($MAVOECONNECT_API_TOKEN_FILE, 0600);
+
+    return [$host, $port];
+}
+
+function maveoconnect_is_loxberry_local_broker(array $mf): bool
+{
+    $u = strtolower(trim((string) ($mf['brokerUrl'] ?? '')));
+
+    return (bool) preg_match('#^mqtt://127\.0\.0\.1:1883/?$#', $u)
+        || (bool) preg_match('#^mqtt://localhost:1883/?$#', $u);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
     if (!maveoconnect_ensure_config_dir()) {
-        $error = 'Could not create config directory.';
+        $error = mc_t('SETTINGS', 'ERROR_CONFIG_DIR');
     } else {
         maveoconnect_ensure_api_token();
         $existing = maveoconnect_load_settings_array();
@@ -46,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
         $daemon = $existing['daemon'] ?? [];
         $logging = $existing['logging'] ?? [];
         $mf = $existing['mqttForward'] ?? [];
+        $general = $existing['general'] ?? [];
 
         $m['email'] = trim((string) ($_POST['maveo_email'] ?? ''));
         $pw = trim((string) ($_POST['maveo_password'] ?? ''));
@@ -54,28 +107,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
         } elseif (!isset($m['password'])) {
             $m['password'] = '';
         }
+        $m['thingName'] = trim((string) ($_POST['maveo_thing_name'] ?? ''));
         $m['cognitoIdentityPoolId'] = trim((string) ($_POST['maveo_cognito_identity_pool_id'] ?? ''));
         $m['cognitoClientId'] = trim((string) ($_POST['maveo_cognito_client_id'] ?? ''));
-        $m['region'] = trim((string) ($_POST['maveo_region'] ?? 'us-west-2'));
+        $m['region'] = trim((string) ($_POST['maveo_region'] ?? MAVOECONNECT_LIB_DEFAULT_REGION));
         $m['useTestEndpoints'] = isset($_POST['maveo_use_test_endpoints']);
-        $m['thingName'] = trim((string) ($_POST['maveo_thing_name'] ?? ''));
         $m['iotHostname'] = trim((string) ($_POST['maveo_iot_hostname'] ?? ''));
         $m['mqttWssSigning'] = trim((string) ($_POST['maveo_mqtt_wss_signing'] ?? ''));
-
-        $adv['blueFiRspPollMs'] = max(100, min(30000, (int) ($_POST['adv_bluefi_rsp_poll_ms'] ?? 400)));
-        $adv['mqttSessionContention'] = isset($_POST['adv_mqtt_session_contention']);
-        foreach (
-            [
-                'adv_mqtt_contention_burst_window_ms' => 'mqttContentionBurstWindowMs',
-                'adv_mqtt_contention_burst_threshold' => 'mqttContentionBurstThreshold',
-                'adv_mqtt_contention_backoff_ms' => 'mqttContentionBackoffMs',
-                'adv_mqtt_reclaim_max_attempts' => 'mqttReclaimMaxAttempts',
-                'adv_mqtt_reclaim_delay_ms' => 'mqttReclaimDelayMs',
-            ] as $field => $key
-        ) {
-            $raw = trim((string) ($_POST[$field] ?? ''));
-            $adv[$key] = $raw === '' ? null : (int) $raw;
-        }
 
         $daemon['port'] = max(1024, min(65535, (int) ($_POST['daemon_port'] ?? 47832)));
 
@@ -84,7 +122,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
             : 'info';
 
         $mf['enabled'] = isset($_POST['mqtt_forward_enabled']);
-        $mf['brokerUrl'] = trim((string) ($_POST['mqtt_forward_broker_url'] ?? 'mqtt://127.0.0.1:1883'));
+        if (isset($_POST['mqtt_use_lb_broker'])) {
+            $mf['brokerUrl'] = 'mqtt://127.0.0.1:1883';
+        } else {
+            $bh = trim((string) ($_POST['mqtt_forward_host'] ?? '127.0.0.1'));
+            if ($bh === '') {
+                $bh = '127.0.0.1';
+            }
+            $bp = max(1, min(65535, (int) ($_POST['mqtt_forward_port'] ?? 1883)));
+            $mf['brokerUrl'] = 'mqtt://' . $bh . ':' . $bp;
+        }
         $mf['username'] = trim((string) ($_POST['mqtt_forward_username'] ?? ''));
         $mfpw = trim((string) ($_POST['mqtt_forward_password'] ?? ''));
         if ($mfpw !== '') {
@@ -94,7 +141,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
         }
         $mf['topicPrefix'] = trim((string) ($_POST['mqtt_forward_topic_prefix'] ?? 'maveo'));
 
+        $langCandidate = strtolower(trim((string) ($_POST['general_language'] ?? '')));
+        if (in_array($langCandidate, ['de', 'en'], true)) {
+            $general['language'] = $langCandidate;
+        }
+
         $out = [
+            'general' => $general,
             'maveo' => $m,
             'advanced' => $adv,
             'daemon' => $daemon,
@@ -104,12 +157,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
 
         $json = json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         if ($json === false) {
-            $error = 'JSON encode failed.';
+            $error = mc_t('SETTINGS', 'ERROR_JSON');
         } elseif (file_put_contents($MAVOECONNECT_SETTINGS, $json) === false) {
-            $error = 'Could not write settings.json';
+            $error = mc_t('SETTINGS', 'ERROR_WRITE');
         } else {
-            @chmod($MAVOECONNECT_SETTINGS, 0600);
-            $msg = 'Settings saved. Restart the Maveo Connect daemon to apply credential and port changes.';
+            @chmod($MAVOECONNECT_SETTINGS, 0640);
+            // Hot-reload first (cheap, no Node restart). Daemon-side auto-restart kicks
+            // in if the call hits a dead listener — see maveoconnect_daemon_request().
+            // null body → maveoconnect_daemon_request emits empty `{}` for POST automatically;
+            // passing `new stdClass()` here breaks the `?array` signature (PHP TypeError → HTTP 500).
+            $reload = maveoconnect_daemon_request('POST', '/api/reload', null, true);
+            if (!empty($reload['ok'])) {
+                $msg = mc_t('SETTINGS', 'SAVED_OK');
+            } else {
+                $rs = maveoconnect_daemon_restart();
+                $msg = $rs['ok']
+                    ? mc_t('SETTINGS', 'SAVED_RESTART_OK')
+                    : mc_t('SETTINGS', 'SAVED_RESTART_FAIL');
+            }
         }
     }
 }
@@ -120,62 +185,402 @@ $adv = $s['advanced'] ?? [];
 $daemon = $s['daemon'] ?? [];
 $logging = $s['logging'] ?? [];
 $mf = $s['mqttForward'] ?? [];
+$general = $s['general'] ?? [];
 
-LBWeb::lbheader('Maveo Connect — Settings', '<style>.maveo-grid{display:grid;grid-template-columns:220px 1fr;gap:8px;max-width:900px;} .maveo-grid label{font-weight:bold;} fieldset{margin:1em 0;}</style>', '');
+$poolDisplay = trim((string) ($m['cognitoIdentityPoolId'] ?? ''));
+$poolPlaceholder = sprintf('%s (%s)', mc_t('SETTINGS', 'HINT_POOL_ID'), MAVOECONNECT_LIB_DEFAULT_POOL);
 
+[$mqttHost, $mqttPort] = maveoconnect_parse_mqtt_url((string) ($mf['brokerUrl'] ?? ''));
+$mqttUseLb = maveoconnect_is_loxberry_local_broker($mf);
+
+$settingsExtraCss = '<style>
+.mc-settings-intro{color:#37474f;font-size:.95rem;line-height:1.55;margin:0 0 18px;max-width:54rem;}
+.mc-step-hint{font-size:.86rem;color:#607d8b;margin:-6px 0 14px;line-height:1.45;max-width:42rem;}
+.mc-probe-banner{display:none;margin:14px 0 0;padding:12px 14px;border-radius:9px;font-size:.87rem;line-height:1.45;}
+.mc-probe-banner.mc-show{display:block;}
+.mc-probe-banner.mc-ok{background:#fff9e6;border:1px solid rgba(248,191,0,.5);color:#3e2723;}
+.mc-probe-banner.mc-err{background:#ffebee;border:1px solid #ef9a9a;color:#b71c1c;}
+.mc-probe-actions{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 4px;align-items:center;}
+.mc-btn-maveo{background:#F8BF00!important;color:#1a1a1a!important;border:1px solid rgba(0,0,0,.1)!important;padding:11px 18px;border-radius:8px;font-weight:600;cursor:pointer;font-size:.92rem;}
+.mc-btn-maveo:hover{background:#e0ac00!important;}
+.mc-btn-maveo:disabled{opacity:.55;cursor:not-allowed;}
+.mc-btn-maveo-secondary{background:#eceff1;color:#263238!important;border:1px solid #cfd8dc;padding:11px 18px;border-radius:8px;font-weight:600;cursor:pointer;font-size:.92rem;}
+.mc-btn-maveo-secondary:hover{background:#dde3e6;}
+.mc-btn-maveo-secondary:disabled{opacity:.55;cursor:not-allowed;}
+.mc-thing-chips{list-style:none;margin:12px 0 0;padding:0;display:none;flex-wrap:wrap;gap:8px;}
+.mc-thing-chips.mc-show{display:flex;}
+.mc-thing-chips li{margin:0;padding:6px 12px;border-radius:999px;background:rgba(248,191,0,.12);border:1px solid rgba(248,191,0,.35);font-size:.8rem;color:#37474f;}
+.mc-card-form{background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:20px 22px;margin:0 0 16px;box-shadow:0 2px 10px rgba(0,0,0,.05);}
+.mc-card-form>h2{margin:0 0 16px;font-size:1.1rem;font-weight:600;color:var(--mc-primary-ink);padding-bottom:10px;border-bottom:2px solid rgba(248,191,0,.2);}
+.mc-form-stack{display:flex;flex-direction:column;gap:16px;max-width:34rem;}
+.mc-field label{display:block;font-weight:600;font-size:.85rem;color:#37474f;margin-bottom:8px;}
+.mc-field .mc-hint{display:block;font-weight:400;font-size:.78rem;color:#607d8b;margin-top:6px;line-height:1.4;}
+.mc-field input[type=text],.mc-field input[type=email],.mc-field input[type=password],.mc-field input[type=number],.mc-field select{
+ width:100%;max-width:34rem;padding:11px 14px;border:1px solid #cfd8dc;border-radius:8px;font-size:.95rem;background:#fff;
+}
+.mc-field input:focus,.mc-field select:focus{outline:none;border-color:#F8BF00;box-shadow:0 0 0 3px rgba(248,191,0,.22);}
+.mc-inline-2{display:grid;grid-template-columns:1.8fr 1fr;gap:14px;max-width:34rem;}
+@media(max-width:520px){.mc-inline-2{grid-template-columns:1fr;}}
+.mc-tile{border:1px solid #eceff1;border-radius:10px;padding:14px 16px;background:#fafcfd;}
+.mc-tile+.mc-tile{margin-top:10px;}
+.mc-tile-head{font-weight:600;font-size:.9rem;color:#263238;margin-bottom:6px;display:flex;align-items:center;gap:10px;}
+.mc-tile-desc{font-size:.84rem;color:#546e7a;line-height:1.45;margin:0;}
+.mc-save{padding:14px 0;}
+.mc-save button[type=submit]{background:#F8BF00;color:#1a1a1a!important;border:1px solid rgba(0,0,0,.08);padding:13px 32px;border-radius:10px;font-size:1rem;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(248,191,0,.35);}
+.mc-save button[type=submit]:hover{background:#e0ac00;}
+.mc-expert{border:1px solid #e0e0e0;border-radius:12px;margin:14px 0 0;background:#fafafa;}
+.mc-expert summary{cursor:pointer;padding:14px 18px;font-weight:600;color:#455a64;list-style:none;display:flex;align-items:center;gap:10px;}
+.mc-expert summary::-webkit-details-marker{display:none;}
+.mc-expert summary::before{content:"⚙";color:#90a4ae;font-size:1.05rem;}
+.mc-expert[open] summary{background:#fff;border-bottom:1px solid #eeeeee;border-radius:12px 12px 0 0;}
+.mc-expert-inner{padding:18px 20px;background:#fff;border-radius:0 0 12px 12px;}
+.mc-section-title{font-size:.95rem;font-weight:700;color:var(--mc-primary-ink);margin:22px 0 12px;}
+.mc-section-title:first-child{margin-top:0;}
+.mc-row{display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:12px 20px;align-items:start;padding:14px 0;border-bottom:1px solid #f0f0f0;}
+.mc-row:last-child{border-bottom:none;}
+@media(max-width:640px){.mc-row{grid-template-columns:1fr;}}
+.mc-row .mc-row-label{font-size:.82rem;font-weight:600;color:#455a64;padding-top:2px;line-height:1.35;}
+.mc-row .mc-row-h{font-size:.75rem;color:#78909c;font-weight:400;display:block;margin-top:6px;line-height:1.35;}
+.mc-row .mc-row-control{padding-top:0;}
+.mc-switch{display:flex;align-items:center;gap:12px;margin:0;}
+.mc-switch input[type=checkbox]{width:22px;height:22px;flex-shrink:0;}
+.mc-switch span{font-size:.87rem;line-height:1.35;color:#37474f;}
+</style>';
+
+maveoconnect_lb_page_start('settings', $settingsExtraCss);
+
+echo '<div class="mc-plugin-container">';
 if ($msg !== '') {
-    echo '<p class="ui-state-highlight ui-corner-all" style="padding:8px;">' . htmlspecialchars($msg) . '</p>';
+    echo '<p class="mc-flash-banner mc-flash-ok ui-state-highlight mc-flash-muted ui-corner-all" style="padding:11px;margin:0 0 12px;border-radius:9px;">'
+        . htmlspecialchars($msg) . '</p>';
 }
 if ($error !== '') {
-    echo '<p class="ui-state-error ui-corner-all" style="padding:8px;">' . htmlspecialchars($error) . '</p>';
+    echo '<p class="mc-flash-banner mc-flash-err ui-state-error ui-corner-all" style="padding:11px;margin:0 0 12px;border-radius:9px;">'
+        . htmlspecialchars($error) . '</p>';
 }
 
-echo '<p><a href="index.php">Index</a> · <a href="status.php">Status</a></p>';
+echo '<p class="mc-settings-intro">';
+mc_th('SETTINGS', 'LEAD');
+echo '</p>';
 
-echo '<form method="post">';
-echo '<fieldset><legend>Maveo account &amp; stick</legend><div class="maveo-grid">';
-echo '<label for="maveo_email">Email</label><input type="email" id="maveo_email" name="maveo_email" value="' . htmlspecialchars($m['email'] ?? '') . '" autocomplete="username" />';
-echo '<label for="maveo_password">Password</label><input type="password" id="maveo_password" name="maveo_password" value="" placeholder="Leave blank to keep current" autocomplete="current-password" />';
-echo '<label for="maveo_cognito_identity_pool_id">Cognito identity pool ID</label><input type="text" id="maveo_cognito_identity_pool_id" name="maveo_cognito_identity_pool_id" value="' . htmlspecialchars($m['cognitoIdentityPoolId'] ?? '') . '" />';
-echo '<label for="maveo_cognito_client_id">Cognito app client ID (optional)</label><input type="text" id="maveo_cognito_client_id" name="maveo_cognito_client_id" value="' . htmlspecialchars($m['cognitoClientId'] ?? '') . '" />';
-echo '<label for="maveo_region">AWS region</label><input type="text" id="maveo_region" name="maveo_region" value="' . htmlspecialchars($m['region'] ?? 'us-west-2') . '" />';
-echo '<label for="maveo_use_test_endpoints">Use test IoT endpoints</label><span><input type="checkbox" id="maveo_use_test_endpoints" name="maveo_use_test_endpoints" value="1"' . (!empty($m['useTestEndpoints']) ? ' checked' : '') . ' /></span>';
-echo '<label for="maveo_thing_name">Connect Stick serial (thing name)</label><input type="text" id="maveo_thing_name" name="maveo_thing_name" value="' . htmlspecialchars($m['thingName'] ?? '') . '" />';
-echo '<label for="maveo_iot_hostname">IoT hostname override (optional)</label><input type="text" id="maveo_iot_hostname" name="maveo_iot_hostname" value="' . htmlspecialchars($m['iotHostname'] ?? '') . '" />';
-echo '<label for="maveo_mqtt_wss_signing">MQTT WSS signing (optional, e.g. query)</label><input type="text" id="maveo_mqtt_wss_signing" name="maveo_mqtt_wss_signing" value="' . htmlspecialchars($m['mqttWssSigning'] ?? '') . '" />';
-echo '</div></fieldset>';
+echo '<form method="post" id="mc_settings_form">';
 
-echo '<fieldset><legend>Daemon &amp; logging</legend><div class="maveo-grid">';
-echo '<label for="daemon_port">Local API port (localhost only)</label><input type="number" id="daemon_port" name="daemon_port" min="1024" max="65535" value="' . (int) ($daemon['port'] ?? 47832) . '" />';
-echo '<label for="logging_level">Log level (daemon log file)</label><select id="logging_level" name="logging_level">';
+echo '<div class="mc-card-form"><h2>';
+mc_te('SETTINGS', 'SECTION1_TITLE');
+echo '</h2>';
+echo '<p class="mc-step-hint">';
+mc_th('SETTINGS', 'SECTION1_HINT');
+echo '</p>';
+echo '<div class="mc-form-stack">';
+echo '<div class="mc-field"><label for="maveo_email">';
+mc_te('SETTINGS', 'LABEL_EMAIL');
+echo '</label>';
+echo '<input type="email" id="maveo_email" name="maveo_email" value="' . htmlspecialchars($m['email'] ?? '') . '" autocomplete="username" /></div>';
+echo '<div class="mc-field"><label for="maveo_password">';
+mc_te('SETTINGS', 'LABEL_PASSWORD');
+echo '</label>';
+echo '<input type="password" id="maveo_password" name="maveo_password" value="" autocomplete="current-password" />';
+echo '<span class="mc-hint">';
+mc_te('SETTINGS', 'HINT_PASSWORD');
+echo '</span></div>';
+echo '</div>';
+echo '<div id="mc_maveo_probe_banner" class="mc-probe-banner" role="status" aria-live="polite"></div>';
+echo '<div class="mc-probe-actions">';
+echo '<button type="button" class="mc-btn-maveo" id="mc_probe_login">';
+mc_te('SETTINGS', 'BTN_PROBE');
+echo '</button>';
+echo '<button type="button" class="mc-btn-maveo-secondary" id="mc_refresh_things">';
+mc_te('SETTINGS', 'BTN_REFRESH_THINGS');
+echo '</button>';
+echo '</div>';
+echo '</div>';
+
+echo '<div class="mc-card-form"><h2>';
+mc_te('SETTINGS', 'SECTION2_TITLE');
+echo '</h2>';
+echo '<p class="mc-step-hint">';
+mc_th('SETTINGS', 'SECTION2_HINT');
+echo '</p>';
+echo '<p class="mc-field" style="margin:0;"><label>';
+mc_te('SETTINGS', 'LABEL_ALL_THINGS');
+echo '</label></p>';
+echo '<ul id="mc_things_all" class="mc-thing-chips" aria-label="things"></ul>';
+echo '<div class="mc-field"><label for="maveo_thing_pick">';
+mc_te('SETTINGS', 'LABEL_THING_PICK');
+echo '</label>';
+echo '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;max-width:36rem;"><select id="maveo_thing_pick" style="flex:1;min-width:200px;padding:11px;border:1px solid #cfd8dc;border-radius:8px;font-size:.95rem;">';
+echo '<option value="">' . htmlspecialchars(mc_t('SETTINGS', 'PICK_PLACEHOLDER'), ENT_QUOTES, 'UTF-8') . '</option></select>';
+echo '</div>';
+echo '<span class="mc-hint" id="mc_discover_msg"></span></div>';
+echo '<div class="mc-field"><label for="maveo_thing_name">';
+mc_te('SETTINGS', 'LABEL_THING_NAME');
+echo '</label>';
+echo '<input type="text" id="maveo_thing_name" name="maveo_thing_name" value="' . htmlspecialchars($m['thingName'] ?? '') . '" autocomplete="off" />';
+echo '<span class="mc-hint">';
+mc_te('SETTINGS', 'HINT_THING_NAME');
+echo '</span></div>';
+echo '</div>';
+
+/** Everything below the dotted line is hidden behind the expert details element so a
+ *  first-time user only sees: email, password, probe button, thing picker.  */
+echo '<details class="mc-expert">';
+echo '<summary>';
+mc_te('SETTINGS', 'EXPERT_SUMMARY');
+echo '</summary>';
+echo '<div class="mc-expert-inner">';
+echo '<p style="margin:0 0 14px;color:#546e7a;font-size:.86rem;line-height:1.5;">';
+mc_te('SETTINGS', 'EXPERT_INTRO');
+echo '</p>';
+
+echo '<p class="mc-section-title">' . htmlspecialchars(mc_t('COMMON', 'LANGUAGE_LABEL'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('COMMON', 'LANGUAGE_LABEL'), ENT_QUOTES, 'UTF-8') . '</div><div class="mc-row-control">';
+echo '<select id="general_language" name="general_language">';
+$langs = MaveoConnectI18N::availableLanguages();
+$pinned = strtolower((string) ($general['language'] ?? ''));
+echo '<option value=""' . ($pinned === '' ? ' selected' : '') . '>(auto)</option>';
+foreach ($langs as $code) {
+    $sel = $pinned === $code ? ' selected' : '';
+    echo '<option value="' . htmlspecialchars($code) . '"' . $sel . '>' . htmlspecialchars(mc_t('COMMON', 'LANGUAGE_OPTION_' . $code, strtoupper($code))) . '</option>';
+}
+echo '</select></div></div>';
+
+echo '<p class="mc-section-title">';
+mc_te('SETTINGS', 'EXPERT_MQTT_TITLE');
+echo '</p>';
+echo '<div class="mc-tile"><div class="mc-tile-head"><label class="mc-switch"><input type="checkbox" id="mqtt_forward_enabled" name="mqtt_forward_enabled" value="1"' . (!empty($mf['enabled']) ? ' checked' : '') . ' /><span>' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_MQTT_FORWARD'), ENT_QUOTES, 'UTF-8') . '</span></label></div>';
+echo '<p class="mc-tile-desc">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_MQTT_FORWARD'), ENT_QUOTES, 'UTF-8') . '</p></div>';
+echo '<div class="mc-tile">';
+echo '<div class="mc-tile-head"><label class="mc-switch"><input type="checkbox" id="mqtt_use_lb_broker" name="mqtt_use_lb_broker" value="1"' . ($mqttUseLb ? ' checked' : '') . ' /><span>' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_USE_LB_BROKER'), ENT_QUOTES, 'UTF-8') . '</span></label></div>';
+echo '<p class="mc-tile-desc">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_USE_LB_BROKER'), ENT_QUOTES, 'UTF-8') . '</p></div>';
+echo '<div id="mc-mqtt-custom" class="mc-inline-2 mc-form-stack" style="margin-top:12px;' . ($mqttUseLb ? 'display:none;' : '') . '">';
+echo '<div class="mc-field"><label for="mqtt_forward_host">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_HOST'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_host" name="mqtt_forward_host" value="' . htmlspecialchars($mqttHost) . '" autocomplete="off" /></div>';
+echo '<div class="mc-field"><label for="mqtt_forward_port">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_PORT'), ENT_QUOTES, 'UTF-8') . '</label><input type="number" id="mqtt_forward_port" name="mqtt_forward_port" min="1" max="65535" value="' . (int) $mqttPort . '" /></div>';
+echo '</div>';
+echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_username">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_USER'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_username" name="mqtt_forward_username" value="' . htmlspecialchars($mf['username'] ?? '') . '" autocomplete="off" /></div>';
+echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_password">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_PASS'), ENT_QUOTES, 'UTF-8') . '</label><input type="password" id="mqtt_forward_password" name="mqtt_forward_password" value="" autocomplete="new-password" /><span class="mc-hint">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_BROKER_PASS'), ENT_QUOTES, 'UTF-8') . '</span></div>';
+echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_topic_prefix">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_TOPIC_PREFIX'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_topic_prefix" name="mqtt_forward_topic_prefix" value="' . htmlspecialchars($mf['topicPrefix'] ?? 'maveo') . '" autocomplete="off" /><span class="mc-hint">';
+mc_th('SETTINGS', 'HINT_TOPIC_PREFIX');
+echo '</span></div>';
+
+echo '<p class="mc-section-title">';
+mc_te('SETTINGS', 'EXPERT_AUTH_TITLE');
+echo '</p>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_POOL_ID'), ENT_QUOTES, 'UTF-8') . '<span class="mc-row-h">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_POOL_ID'), ENT_QUOTES, 'UTF-8') . '</span></div><div class="mc-row-control">';
+echo '<input type="text" id="maveo_cognito_identity_pool_id" name="maveo_cognito_identity_pool_id" value="' . htmlspecialchars($poolDisplay) . '" placeholder="' . htmlspecialchars($poolPlaceholder) . '" autocomplete="off" /></div></div>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_CLIENT_ID'), ENT_QUOTES, 'UTF-8') . '<span class="mc-row-h">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_CLIENT_ID'), ENT_QUOTES, 'UTF-8') . '</span></div><div class="mc-row-control">';
+echo '<input type="text" name="maveo_cognito_client_id" id="maveo_cognito_client_id" value="' . htmlspecialchars($m['cognitoClientId'] ?? '') . '" autocomplete="off" /></div></div>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_REGION'), ENT_QUOTES, 'UTF-8') . '</div><div class="mc-row-control">';
+echo '<input type="text" name="maveo_region" id="maveo_region" value="' . htmlspecialchars($m['region'] ?? MAVOECONNECT_LIB_DEFAULT_REGION) . '" autocomplete="off" /></div></div>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_USE_TEST'), ENT_QUOTES, 'UTF-8') . '<span class="mc-row-h">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_USE_TEST'), ENT_QUOTES, 'UTF-8') . '</span></div><div class="mc-row-control">';
+echo '<label class="mc-switch"><input type="checkbox" id="maveo_use_test_endpoints" name="maveo_use_test_endpoints" value="1"' . (!empty($m['useTestEndpoints']) ? ' checked' : '') . ' /><span>' . htmlspecialchars(mc_t('SETTINGS', 'USE_TEST_LABEL'), ENT_QUOTES, 'UTF-8') . '</span></label>';
+echo '</div></div>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_IOT_HOSTNAME'), ENT_QUOTES, 'UTF-8') . '</div><div class="mc-row-control">';
+echo '<input type="text" name="maveo_iot_hostname" id="maveo_iot_hostname" value="' . htmlspecialchars($m['iotHostname'] ?? '') . '" placeholder="' . htmlspecialchars('Leer = ' . MAVOECONNECT_LIB_DEFAULT_IOT_HOSTNAME) . '" autocomplete="off" /></div></div>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_MQTT_SIGNING'), ENT_QUOTES, 'UTF-8') . '<span class="mc-row-h">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_MQTT_SIGNING'), ENT_QUOTES, 'UTF-8') . '</span></div><div class="mc-row-control">';
+echo '<input type="text" name="maveo_mqtt_wss_signing" id="maveo_mqtt_wss_signing" value="' . htmlspecialchars($m['mqttWssSigning'] ?? '') . '" autocomplete="off" /></div></div>';
+
+echo '<p class="mc-section-title">';
+mc_te('SETTINGS', 'EXPERT_DAEMON_TITLE');
+echo '</p>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_DAEMON_PORT'), ENT_QUOTES, 'UTF-8') . '<span class="mc-row-h">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_DAEMON_PORT'), ENT_QUOTES, 'UTF-8') . '</span></div><div class="mc-row-control">';
+echo '<input type="number" id="daemon_port" name="daemon_port" min="1024" max="65535" value="' . (int) ($daemon['port'] ?? 47832) . '" /></div></div>';
+echo '<div class="mc-row"><div class="mc-row-label">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_LOG_LEVEL'), ENT_QUOTES, 'UTF-8') . '</div><div class="mc-row-control"><select id="logging_level" name="logging_level">';
 foreach (['error', 'warn', 'info', 'debug'] as $lvl) {
     $sel = ($logging['level'] ?? 'info') === $lvl ? ' selected' : '';
-    echo '<option value="' . $lvl . '"' . $sel . '>' . $lvl . '</option>';
+    echo '<option value="' . htmlspecialchars($lvl) . '"' . $sel . '>' . htmlspecialchars($lvl) . '</option>';
 }
-echo '</select>';
-echo '</div></fieldset>';
+echo '</select></div></div>';
 
-echo '<fieldset><legend>MQTT forward (Loxone / local broker)</legend><div class="maveo-grid">';
-echo '<label for="mqtt_forward_enabled">Enable forward</label><span><input type="checkbox" id="mqtt_forward_enabled" name="mqtt_forward_enabled" value="1"' . (!empty($mf['enabled']) ? ' checked' : '') . ' /></span>';
-echo '<label for="mqtt_forward_broker_url">Broker URL</label><input type="text" id="mqtt_forward_broker_url" name="mqtt_forward_broker_url" value="' . htmlspecialchars($mf['brokerUrl'] ?? 'mqtt://127.0.0.1:1883') . '" />';
-echo '<label for="mqtt_forward_username">Username</label><input type="text" id="mqtt_forward_username" name="mqtt_forward_username" value="' . htmlspecialchars($mf['username'] ?? '') . '" autocomplete="off" />';
-echo '<label for="mqtt_forward_password">Password</label><input type="password" id="mqtt_forward_password" name="mqtt_forward_password" value="" placeholder="Leave blank to keep" autocomplete="new-password" />';
-echo '<label for="mqtt_forward_topic_prefix">Topic prefix</label><input type="text" id="mqtt_forward_topic_prefix" name="mqtt_forward_topic_prefix" value="' . htmlspecialchars($mf['topicPrefix'] ?? 'maveo') . '" />';
-echo '</div><p class="ui-helper">Publishes <code>{prefix}/door_position</code>, <code>door_label</code>, <code>light_on</code> (non-retained).</p></fieldset>';
+echo '</div></details>';
 
-echo '<fieldset><legend>Advanced — MQTT reclaim &amp; BlueFi</legend><div class="maveo-grid">';
-echo '<label for="adv_bluefi_rsp_poll_ms">BlueFi poll interval (ms)</label><input type="number" id="adv_bluefi_rsp_poll_ms" name="adv_bluefi_rsp_poll_ms" min="100" max="30000" value="' . (int) ($adv['blueFiRspPollMs'] ?? 400) . '" />';
-echo '<label for="adv_mqtt_session_contention">Session contention handling</label><span><input type="checkbox" id="adv_mqtt_session_contention" name="adv_mqtt_session_contention" value="1"' . (($adv['mqttSessionContention'] ?? true) ? ' checked' : '') . ' /></span>';
-echo '<label for="adv_mqtt_contention_burst_window_ms">Contention burst window (ms)</label><input type="number" id="adv_mqtt_contention_burst_window_ms" name="adv_mqtt_contention_burst_window_ms" value="' . htmlspecialchars((string) ($adv['mqttContentionBurstWindowMs'] ?? '')) . '" placeholder="default" />';
-echo '<label for="adv_mqtt_contention_burst_threshold">Burst threshold</label><input type="number" id="adv_mqtt_contention_burst_threshold" name="adv_mqtt_contention_burst_threshold" value="' . htmlspecialchars((string) ($adv['mqttContentionBurstThreshold'] ?? '')) . '" placeholder="default" />';
-echo '<label for="adv_mqtt_contention_backoff_ms">Backoff after burst (ms)</label><input type="number" id="adv_mqtt_contention_backoff_ms" name="adv_mqtt_contention_backoff_ms" value="' . htmlspecialchars((string) ($adv['mqttContentionBackoffMs'] ?? '')) . '" placeholder="default" />';
-echo '<label for="adv_mqtt_reclaim_max_attempts">Reclaim max attempts</label><input type="number" id="adv_mqtt_reclaim_max_attempts" name="adv_mqtt_reclaim_max_attempts" value="' . htmlspecialchars((string) ($adv['mqttReclaimMaxAttempts'] ?? '')) . '" placeholder="default" />';
-echo '<label for="adv_mqtt_reclaim_delay_ms">Reclaim delay (ms)</label><input type="number" id="adv_mqtt_reclaim_delay_ms" name="adv_mqtt_reclaim_delay_ms" value="' . htmlspecialchars((string) ($adv['mqttReclaimDelayMs'] ?? '')) . '" placeholder="default" />';
-echo '</div></fieldset>';
-
-echo '<p><button type="submit" name="save" value="1">Save</button></p>';
+echo '<div class="mc-save"><button type="submit" name="save" value="1">' . htmlspecialchars(mc_t('COMMON', 'SAVE'), ENT_QUOTES, 'UTF-8') . '</button></div>';
 echo '</form>';
+echo '</div>';
 
-echo '<p class="ui-helper">See <code>maveo-connect-stick-client/.env.example</code> in the plugin tree for field meanings.</p>';
+// ---------- JS (minimal; mostly form controllers + probe AJAX) ----------
+?>
+<script>
+(function () {
+  var lb = document.getElementById("mqtt_use_lb_broker");
+  var row = document.getElementById("mc-mqtt-custom");
+  function sMqtt() {
+    if (lb && row) row.style.display = lb.checked ? "none" : "grid";
+  }
+  if (lb) lb.addEventListener("change", sMqtt);
+  sMqtt();
 
+  var emailEl = document.getElementById("maveo_email");
+  var passEl = document.getElementById("maveo_password");
+  var pick = document.getElementById("maveo_thing_pick");
+  var inp = document.getElementById("maveo_thing_name");
+  var msg = document.getElementById("mc_discover_msg");
+  var banner = document.getElementById("mc_maveo_probe_banner");
+  var chips = document.getElementById("mc_things_all");
+  var bProbe = document.getElementById("mc_probe_login");
+  var bRefresh = document.getElementById("mc_refresh_things");
+
+  /** Strings injected from PHP/i18n so the JS error messages are translated. */
+  var T = <?php echo json_encode([
+      'discoverBusy' => mc_t('SETTINGS', 'PROBE_DISCOVER_BUSY'),
+      'discoverEmpty' => mc_t('SETTINGS', 'PROBE_DISCOVER_EMPTY'),
+      'bannerOk' => mc_t('SETTINGS', 'PROBE_BANNER_OK'),
+      'bannerOkAccount' => mc_t('SETTINGS', 'PROBE_BANNER_OK_ACCOUNT'),
+      'bannerFail' => mc_t('SETTINGS', 'PROBE_BANNER_FAIL'),
+      'bannerNet' => mc_t('SETTINGS', 'PROBE_BANNER_NETWORK'),
+      'daemonDown' => mc_t('SETTINGS', 'PROBE_DAEMON_DOWN'),
+      'apiTokenMissing' => mc_t('SETTINGS', 'PROBE_API_TOKEN_MISSING'),
+      'discoverOkPrefix' => mc_t('SETTINGS', 'PROBE_DISCOVER_OK'),
+  ], JSON_UNESCAPED_UNICODE); ?>;
+
+  function postProbe(body) {
+    return fetch("settings.php?ajax_probe=1", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(function (r) {
+      return r.json();
+    });
+  }
+
+  function setBanner(ok, text) {
+    if (!banner) return;
+    banner.className = "mc-probe-banner mc-show " + (ok ? "mc-ok" : "mc-err");
+    banner.textContent = text;
+  }
+
+  function clearPick() {
+    while (pick && pick.options && pick.options.length > 1) pick.remove(1);
+  }
+
+  function applyThings(ts) {
+    clearPick();
+    ts = ts || [];
+    ts.forEach(function (t) {
+      var o = document.createElement("option");
+      o.value = t.thingName;
+      var a = t.attributes || {};
+      var suf = a.model ? " (" + String(a.model) + ")" : "";
+      o.textContent = String(t.thingName) + suf;
+      pick.appendChild(o);
+    });
+    if (msg) {
+      if (ts.length) {
+        msg.textContent = T.discoverOkPrefix.replace("%d", String(ts.length));
+        msg.style.color = "#5d4037";
+      } else {
+        msg.textContent = T.discoverEmpty;
+        msg.style.color = "#c62828";
+      }
+    }
+    if (chips) {
+      chips.innerHTML = "";
+      chips.classList.remove("mc-show");
+      ts.forEach(function (t) {
+        var li = document.createElement("li");
+        li.textContent = String(t.thingName);
+        chips.appendChild(li);
+      });
+      if (ts.length) chips.classList.add("mc-show");
+    }
+  }
+
+  function setBusy(on) {
+    [bProbe, bRefresh].forEach(function (b) {
+      if (b) b.disabled = !!on;
+    });
+  }
+
+  function humanizeProbeError(text) {
+    var s = String(text || "").trim();
+    var low = s.toLowerCase();
+    if (
+      low.indexOf("connection refused") !== -1 ||
+      low.indexOf("47832") !== -1 ||
+      low.indexOf("failed to connect") !== -1
+    ) {
+      return T.daemonDown.replace("%s", s);
+    }
+    if (low.indexOf("api token missing") !== -1) {
+      return T.apiTokenMissing.replace("%s", s);
+    }
+    return s;
+  }
+
+  function runProbe(body) {
+    setBusy(true);
+    if (msg) {
+      msg.textContent = T.discoverBusy;
+      msg.style.color = "#546e7a";
+    }
+    postProbe(body)
+      .then(function (j) {
+        if (!j || j.ok === false || j.loginOk === false) {
+          var err = humanizeProbeError(
+            (j && (j.message || j.error)) || T.bannerFail,
+          );
+          setBanner(false, err);
+          applyThings([]);
+          return;
+        }
+        var okMsg = j && j.email ? T.bannerOkAccount.replace("%s", j.email) : T.bannerOk;
+        setBanner(true, okMsg);
+        applyThings(j.things || []);
+      })
+      .catch(function () {
+        setBanner(false, humanizeProbeError(T.bannerNet));
+        applyThings([]);
+      })
+      .finally(function () {
+        setBusy(false);
+      });
+  }
+
+  /** Pull current auth-stack overrides from the form so the user can probe EU vs US,
+   *  prod vs test BEFORE saving. Empty values are dropped server-side. */
+  function collectAuthOverrides() {
+    function v(id) {
+      var el = document.getElementById(id);
+      return el && typeof el.value === "string" ? el.value.trim() : "";
+    }
+    var out = {};
+    var pool = v("maveo_cognito_identity_pool_id");
+    if (pool) out.cognitoIdentityPoolId = pool;
+    var clientId = v("maveo_cognito_client_id");
+    if (clientId) out.cognitoClientId = clientId;
+    var region = v("maveo_region");
+    if (region) out.region = region;
+    var iotHost = v("maveo_iot_hostname");
+    if (iotHost) out.iotHostname = iotHost;
+    var sign = v("maveo_mqtt_wss_signing");
+    if (sign) out.mqttWssSigning = sign;
+    var testEl = document.getElementById("maveo_use_test_endpoints");
+    if (testEl) out.useTestEndpoints = !!testEl.checked;
+    return out;
+  }
+
+  if (bProbe && pick && inp && emailEl && passEl) {
+    bProbe.addEventListener("click", function () {
+      var body = collectAuthOverrides();
+      body.email = emailEl.value.trim();
+      body.password = passEl.value;
+      body.maxThings = 120;
+      runProbe(body);
+    });
+  }
+  if (bRefresh && pick && inp) {
+    bRefresh.addEventListener("click", function () {
+      var body = collectAuthOverrides();
+      body.maxThings = 120;
+      runProbe(body);
+    });
+  }
+  if (pick && inp) {
+    pick.addEventListener("change", function () {
+      if (pick.value) inp.value = pick.value;
+    });
+  }
+})();
+</script>
+<?php
 LBWeb::lbfooter();

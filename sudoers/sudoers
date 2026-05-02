@@ -1,0 +1,15 @@
+# Maveo Connect: allow the loxberry user (PHP web UI) to control the daemon without
+# a password prompt. Loaded into /etc/sudoers.d/<NAME> by LoxBerry's sudoers wrapper.
+#
+# REPLACELBHOMEDIR is a LoxBerry installer token. plugininstall.pl substitutes it with
+# the actual LBHOMEDIR (LoxBerry's install root) at install time, so we ship the file
+# with the placeholder — that keeps the ZIP free of hardcoded paths and survives
+# non-default LBHOMEDIR layouts cleanly.
+#
+# Surface kept tiny on purpose: only the LSB init script + the lifecycle verbs we use.
+
+loxberry ALL=(root) NOPASSWD: REPLACELBHOMEDIR/system/daemons/plugins/maveoconnect start
+loxberry ALL=(root) NOPASSWD: REPLACELBHOMEDIR/system/daemons/plugins/maveoconnect stop
+loxberry ALL=(root) NOPASSWD: REPLACELBHOMEDIR/system/daemons/plugins/maveoconnect restart
+loxberry ALL=(root) NOPASSWD: REPLACELBHOMEDIR/system/daemons/plugins/maveoconnect reload
+loxberry ALL=(root) NOPASSWD: REPLACELBHOMEDIR/system/daemons/plugins/maveoconnect status

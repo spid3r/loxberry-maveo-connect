@@ -1,0 +1,48 @@
+# Beta prereleases: explicit `{latest-stable}-beta.N` (only N increments).
+# semantic-release runs only on `main` (see release.yml); it does not model this policy.
+name: Beta release
+
+on:
+  push:
+    branches: [beta]
+
+jobs:
+  beta:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: beta-release-${{ github.ref_name }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Checkout maveo-connect-stick-client (sources for npm link step)
+        uses: actions/checkout@v6
+        with:
+          repository: spid3r/maveo-connect-stick-client
+          path: maveo-connect-stick-client
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          HUSKY: "0"
+
+      - name: Typecheck and unit tests
+        run: npm run typecheck && npm test
+
+      - name: Beta release (tag + GitHub pre-release + ZIP)
+        run: npm run release:beta
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

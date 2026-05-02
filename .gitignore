@@ -1,8 +1,25 @@
 node_modules/
-daemon/node_modules/
-daemon/dist/
+
+# Nested clone for CI (postinstall links this into node_modules)
+/maveo-connect-stick-client/
+
+service/node_modules/
+service/dist/
+service/package-lock.json
 dist/
 dist-staging/
+coverage/
+.playwright-mcp/
+playwright-report/
+test-results/
+.vscode/
+.idea/
+*.log
+
 *.zip
+
 .env
+.env.*
+!.env.example
+
 .DS_Store

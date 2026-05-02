@@ -1,0 +1,45 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md"
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "node ./scripts/prepare-release.mjs ${nextRelease.version} && node ./scripts/prepare-autoupdate-cfg.mjs ${nextRelease.version} && npm run wiki:build && npm run release:zip"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "dist/loxberry-plugin-maveoconnect-*.zip",
+            "label": "LoxBerry plugin maveoconnect (${nextRelease.version})"
+          }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "CHANGELOG.md",
+          "plugin.cfg",
+          "package.json",
+          "daemon/package.json",
+          "release.cfg",
+          "prerelease.cfg",
+          "docs/WIKI_DOKUWIKI_START.txt"
+        ],
+        "message": "chore(release): ${nextRelease.version} [skip ci]"
+      }
+    ]
+  ]
+}

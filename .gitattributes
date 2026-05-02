@@ -3,6 +3,11 @@
 postinstall.sh text eol=lf
 postupgrade.sh text eol=lf
 postroot.sh text eol=lf
-daemon.sh text eol=lf
+preupgrade.sh text eol=lf
+preinstall.sh text eol=lf
+preroot.sh text eol=lf
+preupgrade.sh text eol=lf
+daemon/daemon text eol=lf
+sudoers/** text eol=lf
 uninstall/** text eol=lf
 *.php text eol=lf

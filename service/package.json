@@ -1,0 +1,23 @@
+{
+  "name": "maveoconnect-service",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "esbuild src/service.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/service.mjs --packages=bundle --legal-comments=none --banner:js=\"import{createRequire as __cjsCR}from'node:module';const require=__cjsCR(import.meta.url);\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/service.mjs"
+  },
+  "dependencies": {
+    "maveo-connect-stick-client": "^1.0.1",
+    "mqtt": "^5.15.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "esbuild": "^0.24.2",
+    "typescript": "^6.0.2"
+  }
+}

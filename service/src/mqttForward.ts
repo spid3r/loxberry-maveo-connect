@@ -15,6 +15,10 @@ export class MqttForwarder {
     this.log = log;
   }
 
+  setLogger(log: Logger) {
+    this.log = log;
+  }
+
   updateSettings(settings: PluginSettings) {
     const mf = settings.mqttForward;
     const enabled = mf?.enabled === true;
@@ -92,6 +96,15 @@ export class MqttForwarder {
       }
       if (light !== undefined) {
         c.publish(`${p}/light_on`, light ? "1" : "0", { qos: 0, retain: false });
+      }
+      if (door !== undefined || light !== undefined) {
+        const state: Record<string, string | number | boolean> = { ts: Date.now() };
+        if (door !== undefined) {
+          state.door_position = door;
+          state.door_label = maveoDoorPositionLabel(door);
+        }
+        if (light !== undefined) state.light_on = light;
+        c.publish(`${p}/state`, JSON.stringify(state), { qos: 0, retain: false });
       }
     } catch (e) {
       this.log.warn("MQTT forward: publish failed", { error: String(e) });

@@ -1,15 +1,29 @@
 #!/bin/bash
-# Uninstall only (not on update). As root.
+# Runs as root during uninstall (not on update).
 # Args: $1 tmp $2 pluginname $3 plugin root $4 version $5 LBHOMEDIR
 set +e
-PLUGINROOT="${3:-}"
-PLUGINNAME="${2:-maveoconnect}"
-PIDFILE="/var/run/${PLUGINNAME}_node.pid"
 
-if [ -n "$PLUGINROOT" ] && [ -f "$PLUGINROOT/daemon.sh" ]; then
-  bash "$PLUGINROOT/daemon.sh" stop 2>/dev/null || true
+PLUGINNAME="${2:-maveoconnect}"
+# LoxBerry always exports LBHOMEDIR before invoking installer hooks; $5 mirrors it.
+# We deliberately avoid hardcoding the canonical install root — the LoxBerry installer
+# scans for hardcoded LoxBerry install paths and warns the plugin author otherwise.
+LBH="${LBHOMEDIR:-${5:-}}"
+if [ -z "$LBH" ]; then
+  echo "<WARN> Maveo Connect uninstall: LBHOMEDIR not set; cannot locate init script — skipping"
+  exit 0
+fi
+INITSCRIPT="$LBH/system/daemons/plugins/$PLUGINNAME"
+PIDFILE="$LBH/log/plugins/$PLUGINNAME/daemon.pid"
+SERVICE_JS_GLOB="$LBH/bin/plugins/$PLUGINNAME/service.mjs"
+
+echo "<INFO> Maveo Connect uninstall: stopping daemon ($INITSCRIPT)"
+
+if [ -x "$INITSCRIPT" ]; then
+  bash "$INITSCRIPT" stop 2>/dev/null || true
 fi
 
+# Pidfile fallback — covers the case where the init script was already removed or
+# the pid lost track (rare; keeps reinstall clean).
 if [ -f "$PIDFILE" ]; then
   pid=$(cat "$PIDFILE" 2>/dev/null || true)
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
@@ -17,8 +31,16 @@ if [ -f "$PIDFILE" ]; then
     sleep 1
     kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
   fi
-  rm -f "$PIDFILE"
+  rm -f "$PIDFILE" 2>/dev/null || true
 fi
 
-echo "Maveo Connect uninstall: daemon stopped."
+# Belt-and-suspenders: any leftover Node service process.
+pkill -f "$SERVICE_JS_GLOB" 2>/dev/null || true
+
+# Drop legacy v1.0.x pidfile (when upgrading from the old `daemon.sh` layout to
+# v1.1.0+ for the first time we may still have /var/run/maveoconnect_node.pid hanging
+# around if the old daemon was killed manually).
+rm -f "/var/run/${PLUGINNAME}_node.pid" 2>/dev/null || true
+
+echo "<OK> Maveo Connect uninstall: daemon stopped."
 exit 0

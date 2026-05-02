@@ -20,3 +20,7 @@ if ($__maveo_lb_web === false) {
     exit;
 }
 require_once $__maveo_lb_web;
+
+require_once __DIR__ . '/i18n.php';
+require_once __DIR__ . '/maveo_paths.php';
+MaveoConnectI18N::bootstrap(maveoconnect_lang_dir(), maveoconnect_settings_language());
