@@ -1,17 +1,19 @@
 ====== Maveo Connect / Marantec (Connect Stick over MQTT) ======
 
 ++++ Version History |
-**Version 1.1.0**
+**Version 1.0.1**
 
+  * **docs:** add disclaimer (12db4a2)
+
+**Version 1.0.0**
+
+  * **CI & packaging:** GitHub Actions, semantic-release–style ZIP artifacts, generated wiki starter doc, Dependabot (aligned with sibling LoxBerry plugins).
+  * **Quality:** Mocha unit tests and an injectable port for the Maveo client so the daemon HTTP surface stays testable without cloud hardware.
   * MQTT forward: resolve broker credentials like **loxberry-api-abfall-io** (''general.json'' Mqtt, then ''cred.json'' paths under ''$LBHOMEDIR''); prefer gateway pair on local broker; infer ''$LBHOMEDIR'' from ''MAVOECONNECT_CONFIG'' when needed; export ''LBHOMEDIR'' in init script for Node.
   * MQTT forward: throttle repeated broker errors; slower reconnect; publish only topic-prefix branches ''door_position'', ''door_label'', ''light_on'' (no aggregate JSON topic ''state'' — avoids duplicate ''##'' names when LoxBerry MQTT Gateway expands JSON).
   * Settings UI: Loxone / MQTT integration help (same broker as LoxBerry IP, latency, no commands in); LoxBerry-broker hint text; log page fully i18n.
   * Daemon: optional ''debug'' logging for stick/MQTT forward behaviour (existing log level control).
-
-**Version 1.0.3**
-
-  * CI, semantic‑release ZIP assets, wiki generation, Dependabot (parity with sibling LoxBerry plugins).
-  * Testable daemon HTTP surface (injectable Maveo client port) plus Mocha unit tests.
+  * Docs & compliance: bilingual **DISCLAIMER.md** (community project, not official Marantec/Maveo, cloud/API may change anytime); README + DokuWiki template + overview UI link to it.
 
 Ältere Releases und **ZIP‑Pakete** gibt es bei **[[https://github.com/spid3r/loxberry-maveo-connect/releases|GitHub Releases]]**. Der **Quelltext** liegt im **[[https://github.com/spid3r/loxberry-maveo-connect|Repository]]**.
 

@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.0...v1.0.1) (2026-05-02)
+
+
+### Bug Fixes
+
+* **docs:** add disclaimer ([12db4a2](https://github.com/spid3r/loxberry-maveo-connect/commit/12db4a2e4dfef3b48668e45603a9b025b1621b19))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -18,4 +25,3 @@ Also in this line:
 - Settings UI: Loxone / MQTT integration help (same broker as LoxBerry IP, latency, no commands in); LoxBerry-broker hint text; log page fully i18n.
 - Daemon: optional `debug` logging for stick/MQTT forward behaviour (existing log level control).
 - Docs & compliance: bilingual **DISCLAIMER.md** (community project, not official Marantec/Maveo, cloud/API may change anytime); README + DokuWiki template + overview UI link to it.
-
