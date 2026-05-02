@@ -62,6 +62,7 @@ function statusSignature(snapshot: Record<string, unknown>): string {
     clientReady: snapshot.clientReady,
     connectedAtMs: snapshot.connectedAtMs,
     sessionLoss: snapshot.sessionLoss,
+    backoffUntilMs: snapshot.backoffUntilMs,
   });
 }
 
@@ -442,10 +443,23 @@ export function createDaemonRequestHandler(deps: DaemonRequestDeps) {
       if (req.method === "POST" && url.pathname === "/api/reconnect") {
         const c = requireClient();
         if (!c) return;
-        await c.recoverMqttSession();
+        deps.log.info("Manual MQTT recover requested (refreshCredentials + clear contention)");
+        await c.recoverMqttSession({ refreshCredentials: true });
         deps.bindStickState();
         deps.mutable.connectedAtMs = Date.now();
-        writeJson(res, 200, { ok: true, status: buildStatus(c, settings, maveoEnv, deps.mutable) });
+        try {
+          await c.requestDoorStatus();
+          await c.requestLightState();
+        } catch (e) {
+          deps.log.debug("post /api/reconnect door/light snapshot refresh failed", {
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+        deps.mutable.lastError = null;
+        deps.mutable.lastSessionLoss = null;
+        const snap = buildStatus(c, settings, maveoEnv, deps.mutable);
+        pushStatusIfChanged(snap);
+        writeJson(res, 200, { ok: true, status: snap });
         return;
       }
 

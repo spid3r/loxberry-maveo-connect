@@ -31,6 +31,6 @@ test.describe("@e2e maveoconnect admin HTTP surface", () => {
     });
     expect(r.status()).toBe(200);
     const html = await r.text();
-    expect(html).toMatch(/Maveo Connect|Garage door integration/i);
+    expect(html).toMatch(/Maveo Connect|Garage door integration|Garagentor-Anbindung/i);
   });
 });

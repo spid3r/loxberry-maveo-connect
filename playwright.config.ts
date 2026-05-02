@@ -55,11 +55,8 @@ export default defineConfig({
         launchOptions: {
           ...(process.env.PW_CHROME_CHANNEL ? { channel: process.env.PW_CHROME_CHANNEL } : {}),
           args: runHeaded ? ["--start-maximized"] : [],
-          slowMo: process.env.PWSLOWMO
-            ? Number(process.env.PWSLOWMO)
-            : runHeaded
-              ? 250
-              : 0,
+          /** Optional artificial delay (ms/action). Default 0 — headed runs were too slow with 250ms. */
+          slowMo: process.env.PWSLOWMO ? Number(process.env.PWSLOWMO) : 0,
         },
       },
     },

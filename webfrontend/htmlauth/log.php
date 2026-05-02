@@ -26,6 +26,7 @@ $logExtraCss = '<style>
 maveoconnect_lb_page_start('log', $logExtraCss);
 
 echo '<div class="mc-plugin-container">';
+echo maveoconnect_plugin_header_bar();
 echo '<p class="mc-settings-intro" style="margin-bottom:4px;"><strong>Dauerhaftes Protokoll</strong> des Maveo-Daemon (aktuell aktiv: Log-Level unter Einstellungen → Entwicklung). Die Seite fragt etwa jede Sekunde nach neuen Zeilen.</p>';
 echo '<p class="mc-log-meta">Schnelle Torbewegungen und MQTT stehen zusätzlich live unter „Status&nbsp;&amp; Steuerung“.</p>';
 echo '<p class="mc-log-tip"><strong>Hinweis:</strong> Für mehr Details dort Log-Level auf <code>debug</code> setzen, Daemon neu starten — dann siehst du u.&nbsp;a. BlueFi/Zustände hier.</p>';

@@ -25,7 +25,9 @@ const maveoEnv = getMaveoCredentialEnvAvailable();
 
 async function expectSettingsSavedBanner(page: Page): Promise<void> {
   await expect(
-    page.locator(".mc-flash-banner.mc-flash-ok").filter({ hasText: /^Gespeichert\./ }),
+    page
+      .locator(".mc-flash-banner.mc-flash-ok")
+      .filter({ hasText: /^(Gespeichert|Saved)\./ }),
   ).toBeVisible({ timeout: 45_000 });
 }
 
@@ -78,7 +80,9 @@ test.describe("@e2e maveoconnect full lifecycle (destructive)", () => {
     await expect(page.locator("text=Maveo Connect").first()).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText(/garage door integration/i)).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText(/garage door integration|Garagentor-Anbindung/i),
+    ).toBeVisible({ timeout: 15_000 });
     const banner = page.locator(".mc-plugin-container .mc-banner").first();
     await expect(banner).toBeVisible({ timeout: 15_000 });
     const bannerBg = await banner.evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -96,8 +100,9 @@ test.describe("@e2e maveoconnect full lifecycle (destructive)", () => {
       waitUntil: "domcontentloaded",
     });
     await expect(page.locator("#maveo_email")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("button", { name: /anmeldung prüfen/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /liste aktualisieren \(gespeichert\)/i })).toBeVisible();
+    /** Stable selectors — UI language (DE/EN) comes from LoxBerry / ?lang=, not from this test. */
+    await expect(page.locator("#mc_probe_login")).toBeVisible();
+    await expect(page.locator("#mc_refresh_things")).toBeVisible();
     const probeRgb = await page.locator("#mc_probe_login").evaluate((el) => {
       const s = getComputedStyle(el).backgroundColor;
       const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(s);
@@ -128,7 +133,7 @@ test.describe("@e2e maveoconnect full lifecycle (destructive)", () => {
       else await chk.uncheck().catch(() => {});
     }
 
-    await page.getByRole("button", { name: /^Speichern$/i }).click();
+    await page.locator('#mc_settings_form button[type="submit"][name="save"]').click();
     await expectSettingsSavedBanner(page);
 
     const thingFromEnv = (process.env.MAVO_THING_NAME ?? "").trim();
@@ -137,7 +142,7 @@ test.describe("@e2e maveoconnect full lifecycle (destructive)", () => {
     } else {
       /** Passwortfeld ist nach POST oft leer; explizites Passwort wie in der App nötig. */
       await page.fill("#maveo_password", (process.env.MAVO_PASSWORD ?? "").trim());
-      await page.getByRole("button", { name: /anmeldung prüfen/i }).click();
+      await page.locator("#mc_probe_login").click();
       await expect(page.locator("#mc_maveo_probe_banner.mc-show.mc-ok")).toBeVisible({ timeout: 120_000 });
 
       await page.waitForFunction(
@@ -151,7 +156,7 @@ test.describe("@e2e maveoconnect full lifecycle (destructive)", () => {
       await page.selectOption("#maveo_thing_pick", { index: 1 });
     }
 
-    await page.getByRole("button", { name: /^Speichern$/i }).click();
+    await page.locator('#mc_settings_form button[type="submit"][name="save"]').click();
     await expectSettingsSavedBanner(page);
 
     const restart = runOptionalDaemonRestartViaSsh();

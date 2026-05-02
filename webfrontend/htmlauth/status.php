@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         case 'reconnect':
             maveoconnect_daemon_request('POST', '/api/reconnect', null);
-            $flash = 'Reconnect requested.';
+            $flash = mc_t('STATUS', 'FLASH_RECONNECT', 'MQTT recovery started (fresh login + reconnect).');
             break;
         case 'refresh_state':
             maveoconnect_daemon_request('POST', '/api/refresh-state', null);
@@ -84,7 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $status = maveoconnect_daemon_request('GET', '/api/status');
 $ok = !empty($status['ok']);
-$mcStreamRev = isset($status['_streamRev']) ? (int) $status['_streamRev'] : 0;
 $dp = $status['doorPosition'] ?? null;
 $imgNum = is_numeric($dp) ? (int) $dp : 'unknown';
 $imgSrc = 'images/door-' . $imgNum . '.svg';
@@ -102,6 +101,7 @@ $confirmVent = htmlspecialchars(mc_t('STATUS', 'CONFIRM_VENTILATE', 'VENTILATE s
 maveoconnect_lb_page_start('status');
 
 echo '<div class="mc-plugin-container">';
+echo maveoconnect_plugin_header_bar();
 
 if ($flash !== '') {
     echo '<p class="mc-flash-banner mc-flash-ok ui-state-highlight mc-flash-muted ui-corner-all" style="padding:10px;margin:0 0 12px;border-radius:9px;">' . htmlspecialchars($flash) . '</p>';
@@ -110,8 +110,6 @@ if ($flash !== '') {
 if (!$ok && isset($status['error'])) {
     echo '<p class="ui-state-error ui-corner-all" style="padding:10px;margin:0 0 12px;">' . mc_t('OVERVIEW', 'CARD_STATE_DAEMON_LABEL', 'Daemon') . ': ' . htmlspecialchars((string) $status['error']) . '</p>';
 }
-
-echo '<p class="mc-lead">' . mc_t('STATUS', 'INTRO', 'Maveo Connect — Garagentor-Anbindung über den Marantec Maveo Connect Stick.') . '</p>';
 
 echo '<div class="mc-panel">';
 echo '<h2 class="mc-panel-h">' . mc_t('STATUS', 'HEAD_LIVE', 'Live-Status') . '</h2>';
@@ -135,18 +133,34 @@ echo '</div>';
 
 echo '<p id="mcLastErr" class="ui-state-error ui-corner-all" style="padding:8px;display:' . (!empty($status['lastError']) ? 'block' : 'none') . ';"><strong>' . mc_t('STATUS', 'LAST_ERROR', 'Letzter Fehler') . ':</strong> <span id="mcLastErrText">' . (!empty($status['lastError']) ? htmlspecialchars((string) $status['lastError']) : '') . '</span></p>';
 
+$backoffUntil = isset($status['backoffUntilMs']) ? (int) $status['backoffUntilMs'] : 0;
+$backoffActive = $backoffUntil > (int) round(microtime(true) * 1000);
+$backoffInitText = '';
+if ($backoffActive) {
+    $remMs = $backoffUntil - (int) round(microtime(true) * 1000);
+    $secRem = max(0, (int) ceil($remMs / 1000));
+    $bm = intdiv($secRem, 60);
+    $bs = $secRem % 60;
+    $tpl = mc_t('STATUS', 'BACKOFF_BANNER', 'Automatic MQTT recovery is paused for about %1 min %2 s — often after several hand-offs with the Maveo app. Use “Reconnect MQTT” to retry immediately.');
+    $backoffInitText = str_replace(['%1', '%2'], [(string) $bm, (string) $bs], $tpl);
+}
+echo '<p id="mcBackoffRow" class="ui-state-highlight ui-corner-all mc-flash-muted" style="padding:10px;margin:0 0 12px;border-radius:9px;display:' . ($backoffActive ? 'block' : 'none') . ';"><span id="mcBackoffText">' . htmlspecialchars($backoffInitText) . '</span></p>';
+
 $sl = $status['sessionLoss'] ?? null;
 if (is_array($sl)) {
-    echo '<p class="mc-muted ui-helper"><strong>Letzter Sessionsverlust:</strong> absichtlich getrennt='
-        . (!empty($sl['intentionalDisconnect']) ? 'ja' : 'nein')
-        . ', Fernzugriff vermutet='
-        . (!empty($sl['suspectedRemoteSessionTakeover']) ? 'ja' : 'nein') . '</p>';
+    $yes = mc_t('STATUS', 'SESSION_LOSS_YES', 'yes');
+    $no = mc_t('STATUS', 'SESSION_LOSS_NO', 'no');
+    echo '<p class="mc-muted ui-helper"><strong>' . htmlspecialchars(mc_t('STATUS', 'SESSION_LOSS_TITLE', 'Last session loss')) . ':</strong> '
+        . htmlspecialchars(mc_t('STATUS', 'SESSION_LOSS_INTENTIONAL', 'Intentional disconnect')) . '='
+        . (!empty($sl['intentionalDisconnect']) ? htmlspecialchars($yes) : htmlspecialchars($no))
+        . ', ' . htmlspecialchars(mc_t('STATUS', 'SESSION_LOSS_TAKEOVER', 'Suspected remote takeover')) . '='
+        . (!empty($sl['suspectedRemoteSessionTakeover']) ? htmlspecialchars($yes) : htmlspecialchars($no)) . '</p>';
 }
 
 echo '<div class="mc-door-row">';
 echo '<div class="mc-door-visual"><img id="doorImg" src="' . htmlspecialchars($imgSrc) . '" alt="Door state" /></div>';
 echo '<div style="flex:1;min-width:200px;">';
-echo '<p class="mc-muted">' . mc_t('STATUS', 'HINT_DOOR_PIC', 'Torgrafik und Zahlen werden automatisch per AJAX aktualisiert. Bei Verbindungsproblemen „Reconnect MQTT“ oder „Refresh door/light“ nutzen.') . '</p>';
+echo '<p class="mc-muted">' . mc_t('STATUS', 'HINT_DOOR_PIC', 'Torgrafik und Zahlen aktualisieren sich automatisch (ca. alle 2 Sekunden). Bei Verbindungsproblemen die MQTT-Schaltflächen oder „Tür/Licht aktualisieren“ nutzen.') . '</p>';
 echo '</div></div>';
 echo '</div>';
 
@@ -155,9 +169,11 @@ echo '<h2 class="mc-panel-h">' . mc_t('STATUS', 'HEAD_CONN', 'Verbindung & Zusta
 echo '<div class="mc-btn-grid">';
 echo '<form method="post" onsubmit="return confirm(\'' . $confirmRestart . '\');"><input type="hidden" name="action" value="restart_daemon" /><button type="submit" class="mc-btn-secondary mc-btn-accent">' . mc_t('STATUS', 'ACTION_RESTART', 'Daemon neu starten') . '</button></form>';
 echo '<form method="post"><input type="hidden" name="action" value="reconnect" /><button type="submit" class="mc-btn-secondary mc-btn-accent">' . mc_t('STATUS', 'ACTION_RECONNECT', 'MQTT neu verbinden') . '</button></form>';
+echo '<form method="post"><input type="hidden" name="action" value="reconnect" /><button type="submit" class="mc-btn-secondary mc-btn-accent">' . mc_t('STATUS', 'ACTION_SESSION_RECLAIM', 'Session von App zurückholen') . '</button></form>';
 echo '<form method="post"><input type="hidden" name="action" value="refresh_state" /><button type="submit" class="mc-btn-secondary mc-btn-accent">' . mc_t('STATUS', 'ACTION_REFRESH', 'Tür/Licht aktualisieren') . '</button></form>';
 echo '</div>';
-echo '<p class="mc-muted">' . mc_t('STATUS', 'HINT_RESTART', '„Daemon neu starten" beendet den Node-Prozess und startet ihn frisch — z. B. nach Credential-Wechsel oder bei „Daemon nicht erreichbar". „MQTT neu verbinden" setzt nur den Session-Contention-Backoff zurück.') . '</p>';
+echo '<p class="mc-muted">' . mc_t('STATUS', 'HINT_RESTART', '“Restart daemon” terminates the Node process and starts it fresh — e.g. after a credentials change or when the daemon is not reachable.') . '</p>';
+echo '<p class="mc-muted">' . mc_t('STATUS', 'HINT_SESSION_RECLAIM', 'Both MQTT buttons do the same thing: fresh Maveo login, clear session-contention back-off, and rebuild MQTT — e.g. after the official app took the session. Close the app first or it may reconnect immediately.') . '</p>';
 echo '</div>';
 
 echo '<div class="mc-panel">';
@@ -187,6 +203,7 @@ $jsT = [
     'badgeErr' => mc_t('STATUS', 'BADGE_DAEMON_DOWN', 'Daemon nicht erreichbar'),
     'lightOn' => mc_t('STATUS', 'LIGHT_ON_SHORT', 'an'),
     'lightOff' => mc_t('STATUS', 'LIGHT_OFF_SHORT', 'aus'),
+    'backoffBanner' => mc_t('STATUS', 'BACKOFF_BANNER', 'Automatic MQTT recovery is paused for about %1 min %2 s — often after several hand-offs with the Maveo app. Use “Reconnect MQTT” to retry immediately.'),
 ];
 
 echo '<script>
@@ -206,6 +223,36 @@ var __MC_T = ' . json_encode($jsT, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_
     if(mqtt){ el.className+="ok"; el.textContent=__MC_T.badgeOk; return; }
     if(httpOk){ el.className+="warn"; el.textContent=__MC_T.badgeWarn; return; }
     el.className+="err"; el.textContent=__MC_T.badgeErr;
+  }
+  var backoffTicker=null;
+  var backoffUntilMs=0;
+  function clearBackoffTicker(){ if(backoffTicker){ clearInterval(backoffTicker); backoffTicker=null; } }
+  function formatBackoffText(untilMs){
+    var ms=untilMs-Date.now();
+    if(ms<=0)return "";
+    var sec=Math.ceil(ms/1000);
+    var m=Math.floor(sec/60), s2=sec%60;
+    return __MC_T.backoffBanner.replace("%1",String(m)).replace("%2",String(s2));
+  }
+  function updateBackoffRow(s){
+    var row=document.getElementById("mcBackoffRow");
+    var span=document.getElementById("mcBackoffText");
+    if(!row||!span)return;
+    backoffUntilMs=(typeof s.backoffUntilMs==="number")?s.backoffUntilMs:0;
+    if(!backoffUntilMs||backoffUntilMs<=Date.now()){
+      row.style.display="none";
+      span.textContent="";
+      clearBackoffTicker();
+      return;
+    }
+    row.style.display="block";
+    function tick(){
+      if(!backoffUntilMs||backoffUntilMs<=Date.now()){ row.style.display="none"; span.textContent=""; clearBackoffTicker(); return; }
+      span.textContent=formatBackoffText(backoffUntilMs);
+    }
+    tick();
+    clearBackoffTicker();
+    backoffTicker=setInterval(tick,1000);
   }
   function applyStatus(s){
     if(!s)return;
@@ -238,42 +285,38 @@ var __MC_T = ' . json_encode($jsT, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_
         le.style.display="none";
       }
     }
+    updateBackoffRow(s);
   }
-  var streamRev = ' . $mcStreamRev . ';
-  var pollLoopRunning = false;
-  async function resyncSnapshot(){
+  /** Simple polling (WebSockets would need extra Apache/proxy wiring on LoxBerry). */
+  var POLL_MS = 2000;
+  var pollTimer = null;
+  async function pollTick(){
+    if (document.visibilityState === "hidden") return;
     try {
       var r2 = await fetch("status.php?ajax=1", { credentials: "same-origin" });
       var snap = await r2.json();
       applyStatus(snap);
-      if(snap && typeof snap._streamRev === "number") streamRev = snap._streamRev;
     } catch (e2) {}
   }
-  async function realtimeLoop(){
-    if (pollLoopRunning) return;
-    pollLoopRunning = true;
-    while (document.visibilityState !== "hidden") {
-      try {
-        var r = await fetch("status.php?ajax_wait=1&rev="+streamRev, { credentials: "same-origin" });
-        var s = await r.json();
-        if (!s) { await new Promise(function(res){ setTimeout(res, 1500); }); continue; }
-        if (s.waitAborted) {
-          if (typeof s._streamRev === "number") streamRev = s._streamRev;
-          await resyncSnapshot();
-          await new Promise(function(res){ setTimeout(res, 500); });
-          continue;
-        }
-        if (typeof s._streamRev === "number") streamRev = s._streamRev;
-        applyStatus(s);
-      } catch (e) {
-        await new Promise(function(res){ setTimeout(res, 2000); });
-      }
-    }
-    pollLoopRunning = false;
+  function startPolling(){
+    if (pollTimer) return;
+    void pollTick();
+    pollTimer = setInterval(function(){ void pollTick(); }, POLL_MS);
   }
-  realtimeLoop();
+  function stopPolling(){
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+  startPolling();
   document.addEventListener("visibilitychange", function(){
-    if (document.visibilityState === "visible") realtimeLoop();
+    if (document.visibilityState === "visible") {
+      void pollTick();
+      startPolling();
+    } else {
+      stopPolling();
+    }
   });
 })();
 </script>';

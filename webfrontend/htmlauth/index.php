@@ -28,8 +28,8 @@ $lineMqtt = $mqtt
 maveoconnect_lb_page_start('overview');
 
 echo '<div class="mc-plugin-container">';
+echo maveoconnect_plugin_header_bar();
 echo '<div class="mc-banner">';
-echo '<h2>' . mc_t('COMMON', 'PLUGIN_TITLE', 'Maveo Connect') . '</h2>';
 echo '<p class="mc-sub">' . mc_t('OVERVIEW', 'BANNER_SUB', 'Garage door integration via the Marantec Maveo Connect Stick.') . '</p>';
 echo '</div>';
 

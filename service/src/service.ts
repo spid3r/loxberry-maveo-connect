@@ -97,6 +97,25 @@ const mutable: DaemonMutableState = {
  * (post-`connectMqtt`) and from the auto-reclaim `onRecovered` callback, so we are
  * always safe — but wrap defensively so a stray call cannot crash the daemon.
  */
+/**
+ * After MQTT reconnects, request fresh BlueFi reads so `mutable` / `/api/status` match the stick
+ * before the next UI poll (stick updates otherwise only arrive when the device pushes).
+ */
+async function hydrateStickSnapshotAfterMqttRecovery(context: string): Promise<void> {
+  if (!client) return;
+  try {
+    await client.requestDoorStatus();
+    await client.requestLightState();
+  } catch (e) {
+    log.debug(`${context}: door/light snapshot refresh failed`, {
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+  mutable.lastSessionLoss = null;
+  mutable.lastError = null;
+  pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+}
+
 function bindStickState() {
   unstick();
   unstick = () => {};
@@ -138,6 +157,24 @@ function wireClient() {
         log.info("MQTT session recovered; rebinding stick state listener");
         bindStickState();
         bindLifecycleAfterConnect();
+        void hydrateStickSnapshotAfterMqttRecovery("auto-reclaim");
+      },
+      onSessionContentionBurst: (info) => {
+        log.warn("MQTT session contention burst — auto-reclaim paused", {
+          backoffUntilMs: info.backoffUntilMs,
+          backoffUntilIso: new Date(info.backoffUntilMs).toISOString(),
+          burstWindowMs: info.burstWindowMs,
+          burstThreshold: info.burstThreshold,
+          backoffAfterBurstMs: info.backoffAfterBurstMs,
+          hint: "Until backoffUntil, automatic reclaim is paused; use Status → MQTT buttons or wait.",
+        });
+        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+      },
+      onSessionContentionSkipped: (info) => {
+        log.debug("MQTT auto-reclaim skipped (contention backoff active)", {
+          backoffUntilMs: info.backoffUntilMs,
+        });
+        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
       },
     }),
   );
@@ -169,8 +206,8 @@ function bindLifecycleAfterConnect(): void {
         pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
       }
       if (e.kind === "manual_recover_finished" && e.ok) {
+        /** Full snapshot + sessionLoss clear happens in `/api/reconnect` after await; avoid double MQTT reads here. */
         mutable.lastError = null;
-        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
       }
     });
     if (typeof unsub === "function") unbindLifecycle = unsub;

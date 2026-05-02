@@ -59,7 +59,10 @@ test.describe("@e2e maveoconnect live status & control (read-only)", () => {
 
   test("daemon status JSON: settingsOk + clientReady + transport sensible", async ({ request }) => {
     const initial = await fetchDaemonAjaxStatus(request, { pluginFolder: PLUGIN_FOLDER });
-    expect(initial.settingsOk, "settingsOk must be true after credentials saved").toBe(true);
+    expect(
+      initial.settingsOk,
+      `settingsOk must be true (credentials on disk). lastError=${String(initial.lastError ?? "")} transport=${String(initial.transport)}`,
+    ).toBe(true);
     expect(initial.clientReady, "clientReady must be true once daemon built the stick client").toBe(true);
     expect(typeof initial.transport).toBe("string");
     expect(["connected", "reclaiming", "disconnected"]).toContain(initial.transport);
@@ -67,7 +70,11 @@ test.describe("@e2e maveoconnect live status & control (read-only)", () => {
   });
 
   test("MQTT reaches connected within deadline + status page reflects it", async ({ request, page }) => {
-    const st = await pollMqttConnectedAjax(request, { pluginFolder: PLUGIN_FOLDER });
+    /** Skip the 3-minute poll when full-lifecycle already left MQTT up (same worker, serial run). */
+    let st = await fetchDaemonAjaxStatus(request, { pluginFolder: PLUGIN_FOLDER });
+    if (!st.mqttConnected) {
+      st = await pollMqttConnectedAjax(request, { pluginFolder: PLUGIN_FOLDER });
+    }
     expect(
       st.mqttConnected,
       `MQTT did not connect: transport=${String(st.transport)} lastError=${String(st.lastError ?? "")}`,

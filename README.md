@@ -54,7 +54,7 @@ your own risk.
 - **Maveo Connect cloud login** with auto-discovery: pick the right Marantec stack
   (US-prod, US-test, EU-prod, EU-test) — **probe before save** lets you try EU vs US
   without committing a wrong config.
-- **Live status & control** of door position and light from the *Status* tab (long-poll to the daemon for near-real-time UI).
+- **Live status & control** of door position and light from the *Status* tab (browser polls the daemon about every **2 seconds** — no WebSockets required on stock LoxBerry).
 - **Optional MQTT forward** to Loxone or another broker (LoxBerry Mosquitto auto-detect).
 - **LoxBerry-canonical daemon lifecycle** (LSB init script in `daemon/daemon`, sudoers
   for rootless restart, automatic restart-on-`Connection refused` from the PHP UI).
@@ -69,7 +69,9 @@ your own risk.
 
 German admin previews live under `docs/wiki-assets/`. They are captured
 **automatically** with Playwright against a real LoxBerry appliance — see
-`npm run wiki:screenshots` and [`scripts/run-e2e-full.mjs`](./scripts/run-e2e-full.mjs).
+`npm run wiki:screenshots` (sets `E2E_LIVE=1` for that run — see [`scripts/wiki-screenshots.mjs`](./scripts/wiki-screenshots.mjs)),
+`npm run wiki:screenshots:headed` to watch Chromium, or `npm run wiki:screenshots:ui` for the Playwright UI mode.
+Full destructive E2E: [`scripts/run-e2e-full.mjs`](./scripts/run-e2e-full.mjs).
 
 <p align="center">
   <img src="docs/wiki-assets/maveoconnect-status-de.png" width="820" alt="Maveo Connect — Status tab (German)" />
@@ -82,9 +84,9 @@ German admin previews live under `docs/wiki-assets/`. They are captured
 ## How it works
 
 1. **Web UI (PHP)** — embedded LoxBerry admin pages. Talks to the daemon over **localhost HTTP** with a
-   shared `api_token.txt` (`X-Maveo-Token` header). The **Status** tab uses **long-poll**
-   (`/api/status/wait` via `status.php?ajax_wait=1`) so values refresh on change instead
-   of a fixed-interval poll; **no external JS/CSS CDNs**.
+   shared `api_token.txt` (`X-Maveo-Token` header). The **Status** tab **polls** `status.php?ajax=1`
+   about every **2 seconds** (simple and robust; `/api/status/wait` remains available for other tools).
+   **No external JS/CSS CDNs**.
 2. **Daemon (Node.js)** — single long-lived process bundled by **esbuild** to
    `bin/service.mjs`. Started by LoxBerry's standard init layout
    (`$LBHOMEDIR/system/daemons/plugins/maveoconnect`); the PHP UI can also restart it
@@ -104,6 +106,8 @@ German admin previews live under `docs/wiki-assets/`. They are captured
    **Anmeldung prüfen / Test login** → pick the **thing** → **Save**.
 4. **Status & Steuerung / Status & control** shows live door position and light;
    buttons drive open / close / stop / light on/off.
+
+**German step-by-step (install, MQTT session, reclaim):** [docs/LOXBERRY_ANLEITUNG.md](./docs/LOXBERRY_ANLEITUNG.md) — same spirit as the [Abfall.io install troubleshooting](https://github.com/spid3r/loxberry-api-abfall-io/blob/main/docs/troubleshooting-plugin-install.md) doc for that plugin.
 
 ### Local development
 
@@ -167,7 +171,7 @@ There are **no external CDN libraries** in the plugin web UI — only embedded C
    - **Virtual input (analog)** or **status** on `…/door_position` — integer 0…6; optionally drive icons or logic from `…/door_label`.
 5. Open/close **commands** from Loxone to the garage are **not** exposed on this MQTT channel (only state **out**). Use Loxone controls that talk to your existing door actors, or operate the door from the plugin **Status** tab / Maveo app.
 
-Door movement is reflected as soon as the Marantec cloud pushes stick state; the admin **Status** page uses an internal **long-poll** (`/api/status/wait`) so the UI updates on change without fixed 4 s polling. True browser **WebSockets** would require exposing the Node port or an Apache `wstunnel` proxy on the LoxBerry — intentionally not required here.
+Door movement is reflected as soon as the Marantec cloud pushes stick state; the admin **Status** page **polls** the daemon about every **2 seconds** so the UI stays fresh without WebSockets. Long-poll (`/api/status/wait`) is still implemented server-side for optional use; the bundled UI prefers simple polling for fewer moving parts behind Apache.
 
 ## Architecture
 

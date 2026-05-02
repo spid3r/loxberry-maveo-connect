@@ -141,24 +141,31 @@ a.mc-card-btn:hover{background:var(--mc-primary-hover);}
 .mc-lang-switch a{color:#455a64;text-decoration:none;}
 .mc-lang-switch a:hover{text-decoration:underline;}
 .mc-lang-switch strong{color:var(--mc-primary-ink);}
-/* LoxBerry lbheader title: plugin glyph + text (same idea as abfall-io) */
-.mc-lb-brand{display:inline-flex;align-items:center;gap:10px;vertical-align:middle;line-height:1.15;}
-.mc-lb-brand-icon{display:block;width:40px;height:40px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.22);flex-shrink:0;}
-.mc-lb-brand-text{font-weight:600;font-size:1.05em;}
+/* In-page header: icon + title (abfall-io pattern — LBWeb::lbheader stays plain text). */
+.mc-plugin-head{
+  display:flex;align-items:center;gap:14px;margin:0 0 16px;padding:0 0 14px;border-bottom:1px solid #e4e4e4;
+}
+.mc-plugin-head img{
+  width:48px;height:48px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.18);flex-shrink:0;display:block;
+}
+.mc-plugin-head .mc-plugin-head-text h1{margin:0;font-size:1.22rem;font-weight:600;color:var(--mc-primary-ink);line-height:1.2;}
+.mc-plugin-head .mc-plugin-head-sub{margin:5px 0 0;font-size:.88rem;color:#555;line-height:1.4;}
 </style>
 CSS;
 }
 
 /**
- * LoxBerry header title: icon (squircle PNG) + plugin name — same idea as abfall-io.
+ * First row inside `.mc-plugin-container`: logo + title + subtitle (like abfall-io plugin-header).
+ * LoxBerry navbar title stays plain text via {@see maveoconnect_lb_page_start}.
  */
-function maveoconnect_header_brand_html(): string
+function maveoconnect_plugin_header_bar(): string
 {
     $title = htmlspecialchars(mc_t('COMMON', 'PLUGIN_TITLE', 'Maveo Connect'), ENT_QUOTES, 'UTF-8');
-    return '<span class="mc-lb-brand">'
-        . '<img src="icon_64.png" width="40" height="40" alt="" class="mc-lb-brand-icon" decoding="async" />'
-        . '<span class="mc-lb-brand-text">' . $title . '</span>'
-        . '</span>';
+    $sub = htmlspecialchars(mc_t('COMMON', 'PLUGIN_SUBTITLE', 'Garage door integration via the Marantec Maveo Connect Stick.'), ENT_QUOTES, 'UTF-8');
+    return '<header class="mc-plugin-head" role="banner">'
+        . '<img src="icon_64.png" width="48" height="48" alt="" decoding="async" />'
+        . '<div class="mc-plugin-head-text"><h1>' . $title . '</h1>'
+        . '<p class="mc-plugin-head-sub">' . $sub . '</p></div></header>';
 }
 
 /**
@@ -171,6 +178,7 @@ function maveoconnect_lb_page_start(string $activeTab, string $extraHeadHtml = '
     global $htmlhead;
     $htmlhead = maveoconnect_styles() . $extraHeadHtml;
     maveoconnect_navbar($activeTab);
-    LBWeb::lbheader(maveoconnect_header_brand_html(), '', '');
+    /** Plain title in LoxBerry chrome; logo + subtitle live in {@see maveoconnect_plugin_header_bar}. */
+    LBWeb::lbheader(htmlspecialchars(mc_t('COMMON', 'PLUGIN_TITLE', 'Maveo Connect'), ENT_QUOTES, 'UTF-8'), '', '');
     echo maveoconnect_render_lang_switcher();
 }

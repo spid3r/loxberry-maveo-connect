@@ -250,6 +250,7 @@ $settingsExtraCss = '<style>
 maveoconnect_lb_page_start('settings', $settingsExtraCss);
 
 echo '<div class="mc-plugin-container">';
+echo maveoconnect_plugin_header_bar();
 if ($msg !== '') {
     echo '<p class="mc-flash-banner mc-flash-ok ui-state-highlight mc-flash-muted ui-corner-all" style="padding:11px;margin:0 0 12px;border-radius:9px;">'
         . htmlspecialchars($msg) . '</p>';
