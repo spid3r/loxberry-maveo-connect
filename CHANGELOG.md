@@ -1,3 +1,13 @@
+# 1.0.0 (2026-05-02)
+
+
+### Features
+
+* **build:** first commit ([4015877](https://github.com/spid3r/loxberry-maveo-connect/commit/40158779460468e19209bdd70d0f53a920f5c929))
+* enhance MQTT forwarding and LoxBerry integration ([50d87a7](https://github.com/spid3r/loxberry-maveo-connect/commit/50d87a7f77487d7690475b6f05582a45d88686f2))
+* release version 1.1.0 with MQTT enhancements and UI improvements ([f25d30f](https://github.com/spid3r/loxberry-maveo-connect/commit/f25d30fa9e2e13d4127299a4f851a58702cd368b))
+* update wiki screenshot scripts and enhance status page functionality ([c1e522d](https://github.com/spid3r/loxberry-maveo-connect/commit/c1e522da2638079914f671d7bd9f2af3b0796454))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
