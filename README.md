@@ -200,10 +200,20 @@ When **MQTT forward** is enabled in *Settings → Advanced settings*, the daemon
 **non-retained** UTF-8 payloads to your broker (default prefix `maveo`, no trailing slash stored):
 
 ```text
-<prefix>/door_position   ← door position code (integer 0…6, Maveo / BlueFi encoding)
-<prefix>/door_label      ← English status token from the stick client (e.g. closed, open)
-<prefix>/light_on        ← "1" or "0"
+<prefix>/door_position    ← door position code (integer 0…6, Maveo / BlueFi encoding)   non-retained
+<prefix>/door_label       ← English status token from the stick client (e.g. closed, open) non-retained
+<prefix>/light_on         ← "1" or "0"                                                  non-retained
+<prefix>/mqtt_connected   ← "1" / "0" — link to the Marantec cloud is alive            retained
+<prefix>/session_takeover ← "1" while the Maveo app appears to have stolen the session retained
+<prefix>/transport        ← "connected" / "connecting" / "disconnected" / …            retained
+<prefix>/backoff_until_ms ← > 0 while auto-reclaim is paused after a contention burst  retained
 ```
+
+The connection topics are **retained**, so a Loxone Statusbaustein gets the last
+known value the moment the broker comes up — no need to wait for the next
+state change. The door / light topics stay non-retained because they always
+fire shortly after a real event and we don't want stale values to override
+fresh ones after a reboot.
 
 There is **no** combined `<prefix>/state` JSON topic: publishing it duplicated the same
 values when the LoxBerry MQTT Gateway expands JSON into extra flat topics (`##` in names).
@@ -252,15 +262,39 @@ http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=of
 http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=toggle
 http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/reclaim.php
 http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?fmt=text&lines=80
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?level=debug
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?level=info
 ```
 
 Successful actions return HTTP `200` with the body `OK`; failures return `4xx`/`5xx` with `ERR <message>`. While the toggle is off, every endpoint replies `503 disabled`. `status.php` returns a compact JSON snapshot — useful as a fallback for setups without an MQTT broker:
 
 ```json
-{"doorPosition":3,"doorLabel":"open","lightOn":false,"mqttConnected":true,"stickSerial":"…","lastError":null}
+{"doorPosition":3,"doorLabel":"open","lightOn":false,"mqttConnected":true,"sessionTakeover":false,"transport":"connected","backoffUntilMs":0,"stickSerial":"…","lastError":null}
 ```
 
+`log.php` returns the current daemon log level plus the last lines from the ring
+buffer (default 60). Pass `?fmt=text&lines=N` to get plain text for a Loxone
+Webview/URL-Befehl, or `?level=debug|info|warn|error` to flip the **runtime**
+log level on the fly — the change is intentional **not persisted**, so a daemon
+restart restores the level saved in `settings.json`. That is exactly what you
+want for short ad-hoc diagnostics from the Loxone app: turn debug on, watch the
+log, turn it back off.
+
 Don't expose this URL space to the open internet — Basic Auth is fine inside a home network, which is the LoxBerry default.
+
+#### Wiring "manual reclaim on session takeover" in Loxone Config
+
+1. Subscribe to `<prefix>/session_takeover` and `<prefix>/mqtt_connected` (or
+   poll `…/api/status.php` every 30 s and read `sessionTakeover` /
+   `mqttConnected`).
+2. Use a **Logikbaustein → Flankenerkennung** on `session_takeover == 1` (or
+   `mqtt_connected == 0` for longer than ~30 s, with a Treppenlicht-/
+   Verzögerungsbaustein to debounce).
+3. Wire the output to a **Virtueller HTTP-Ausgang** that calls
+   `…/api/reclaim.php`. Optionally gate it behind `backoff_until_ms == 0`, so
+   no reclaim is attempted while the daemon is in its post-burst pause.
 
 Door movement is reflected as soon as the Marantec cloud pushes stick state; the admin **Status** page **polls** the daemon about every **2 seconds** so the UI stays fresh without WebSockets. Long-poll (`/api/status/wait`) is still implemented server-side for optional use; the bundled UI prefers simple polling for fewer moving parts behind Apache.
 

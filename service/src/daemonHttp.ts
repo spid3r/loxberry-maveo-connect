@@ -380,6 +380,39 @@ export function createDaemonRequestHandler(deps: DaemonRequestDeps) {
         return;
       }
 
+      if (req.method === "POST" && url.pathname === "/api/log/level") {
+        /**
+         * Runtime log-level switch — used by `…/api/log.php?level=debug` so a
+         * Loxone "Diagnose-Modus EIN" virtual output can flip the daemon to
+         * verbose without anyone touching the Settings page. We deliberately
+         * do NOT persist into settings.json here: the change is meant to be
+         * temporary; on the next daemon restart the saved level wins again.
+         */
+        const body = await parseBody(req);
+        const candidate = String(body.level ?? "").toLowerCase();
+        const allowed = ["error", "warn", "info", "debug"] as const;
+        if (!allowed.includes(candidate as (typeof allowed)[number])) {
+          writeJson(res, 400, {
+            ok: false,
+            error: "invalid_level",
+            allowed,
+            message: "Use one of error / warn / info / debug.",
+          });
+          return;
+        }
+        const previous = deps.log.level;
+        deps.log.setLevel(candidate as (typeof allowed)[number]);
+        deps.log.info("log level changed via API", { previous, level: candidate, persisted: false });
+        writeJson(res, 200, {
+          ok: true,
+          message: `Log level set to ${candidate} (runtime only).`,
+          previous,
+          level: candidate,
+          persisted: false,
+        });
+        return;
+      }
+
       if (req.method === "POST" && url.pathname === "/api/log/clear") {
         /**
          * Manual log purge from the WebUI: truncate `daemon.log`, drop rotated

@@ -373,7 +373,17 @@ echo '<ul class="mc-muted" style="margin:0 0 10px;padding-left:1.25rem;line-heig
 echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=open</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_DOOR', 'open / close / stop / ventilate'), ENT_QUOTES, 'UTF-8') . '</li>';
 echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=on</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_LIGHT', 'on / off / toggle'), ENT_QUOTES, 'UTF-8') . '</li>';
 echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/reclaim.php</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_RECLAIM', 'reclaim MQTT session from the Maveo app'), ENT_QUOTES, 'UTF-8') . '</li>';
-echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_STATUS', 'compact JSON status (door / light / mqttConnected)'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_STATUS', 'compact JSON status (door / light / mqttConnected / sessionTakeover)'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?fmt=text&amp;lines=80</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_LOG_TAIL', 'tail of the daemon log (plain text; good for a Loxone webview)'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?level=debug</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_LOG_LEVEL', 'switch the runtime log level (debug / info / warn / error); not persisted'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '</ul>';
+
+echo '<p class="mc-muted" style="margin:8px 0 4px;line-height:1.45;font-size:.88rem;font-weight:600;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPICS_TITLE', 'MQTT topics (when MQTT forward is on):'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<ul class="mc-muted" style="margin:0 0 10px;padding-left:1.25rem;line-height:1.55;font-size:.85rem;">';
+echo '<li><code>&lt;prefix&gt;/door_position</code>, <code>&lt;prefix&gt;/door_label</code>, <code>&lt;prefix&gt;/light_on</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPIC_STATE', 'door + light status (non-retained, fires on every change)'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>&lt;prefix&gt;/mqtt_connected</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPIC_CONN', 'retained 1/0 — link to the Marantec cloud is alive'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>&lt;prefix&gt;/session_takeover</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPIC_TAKEOVER', 'retained 1/0 — Maveo app appears to have stolen the session; drive a Loxone reclaim trigger off this'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>&lt;prefix&gt;/transport</code>, <code>&lt;prefix&gt;/backoff_until_ms</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPIC_DIAG', 'retained diagnostic values (transport state; > 0 while auto-reclaim is paused)'), ENT_QUOTES, 'UTF-8') . '</li>';
 echo '</ul>';
 
 // --- Door position codes (0..6) — useful for Loxone status block design ---

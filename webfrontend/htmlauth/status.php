@@ -241,6 +241,8 @@ echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/do
 echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=on</code></li>';
 echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/reclaim.php</code></li>';
 echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php</code></li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?fmt=text&amp;lines=80</code></li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?level=debug</code></li>';
 echo '</ul>';
 echo '<p class="mc-muted" style="margin:0;font-size:.82rem;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_AUTH_NOTE', 'Authentication uses the standard LoxBerry plugin Basic Auth. Send the credentials inline in the URL configured in your Loxone Virtual Output, e.g. http://loxberry:loxberry@<LoxBerry-IP>/...'), ENT_QUOTES, 'UTF-8') . '</p>';
 echo '</div>';

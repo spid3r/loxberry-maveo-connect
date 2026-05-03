@@ -71,6 +71,10 @@ http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=of
 http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=toggle
 http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/reclaim.php
 http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?fmt=text&lines=80
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?level=debug
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?level=info
 ```
 
 Erfolgreiche Aktionen liefern HTTP `200` mit dem Body `OK`. `status.php` liefert ein kompaktes JSON, das du als Fallback für reine HTTP-Statusabfragen aus Loxone nutzen kannst (z. B. wenn du kein MQTT-Gateway laufen hast).
@@ -94,6 +98,29 @@ Erfolgreiche Aktionen liefern HTTP `200` mit dem Body `OK`. `status.php` liefert
 ### 6.4 Sicherheitshinweis
 
 Die Loxone-Steuer-API ist für dein **Heimnetz** gedacht — die Basic-Auth schützt sie auf demselben Niveau wie alle anderen LoxBerry-Plugin-Seiten. Mache sie **nicht** ohne weiteren Schutz aus dem Internet erreichbar; das gilt für jedes LoxBerry-Plugin gleichermaßen.
+
+### 6.5 Verbindungs-Status für „Detached“-Erkennung
+
+Zusätzlich zu Tor- und Lichtwerten publiziert das Plugin (wenn MQTT-Forward aktiv ist) **retained** Topics zum Verbindungsstatus, damit du in Loxone „Garage online?“ und „Hat die Maveo-App die Sitzung übernommen?“ direkt visualisieren oder als Trigger nutzen kannst:
+
+```text
+<prefix>/mqtt_connected   1 / 0   — Verbindung zur Marantec-Cloud lebt
+<prefix>/session_takeover 1 / 0   — letzte Trennung sieht nach App-Übernahme aus
+<prefix>/transport        connected | connecting | disconnected | …
+<prefix>/backoff_until_ms > 0 solange die Auto-Reclaim-Pause läuft
+```
+
+Dieselben Felder sind auch in `status.php` enthalten (`mqttConnected`, `sessionTakeover`, `transport`, `backoffUntilMs`) — für reine HTTP-Polling-Setups.
+
+**Manueller Reclaim aus Loxone**: Verdrahte einen **Logikbaustein → Flankenerkennung** auf `session_takeover == 1` (oder `mqtt_connected == 0` länger als ~30 s, mit Treppenlicht-/Verzögerungsbaustein zum Entprellen) auf einen Virtuellen HTTP-Ausgang `…/api/reclaim.php`. Optional vorher prüfen, dass `backoff_until_ms == 0` ist — während der Auto-Reclaim-Pause hat ein zusätzlicher Reclaim wenig Zweck.
+
+### 6.6 Diagnose & Logs aus Loxone
+
+Das Plugin kann das Daemon-Log auch direkt in der Loxone-App sichtbar / steuerbar machen — nützlich für „on the fly“-Diagnose:
+
+- `…/api/log.php` (JSON) — aktuelles Log-Level + die letzten Zeilen aus dem Ringpuffer (Default 60 Zeilen).
+- `…/api/log.php?fmt=text&lines=80` — Plain-Text-Tail; eignet sich gut für einen **Webview-Baustein** in der Loxone-App.
+- `…/api/log.php?level=debug` (oder `info` / `warn` / `error`) — schaltet das **Log-Level zur Laufzeit** um. Praktisch für zwei Schaltflächen „Diagnose-Modus EIN“ (`level=debug`) und „AUS“ (`level=info`). Die Änderung wird **nicht** in `settings.json` gespeichert: nach einem Daemon-Neustart gilt wieder der gespeicherte Wert.
 
 ## 7. Log & Support
 
