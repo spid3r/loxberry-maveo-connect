@@ -384,6 +384,7 @@ echo '<li><code>&lt;prefix&gt;/door_position</code>, <code>&lt;prefix&gt;/door_l
 echo '<li><code>&lt;prefix&gt;/mqtt_connected</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPIC_CONN', 'retained 1/0 — link to the Marantec cloud is alive'), ENT_QUOTES, 'UTF-8') . '</li>';
 echo '<li><code>&lt;prefix&gt;/session_takeover</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPIC_TAKEOVER', 'retained 1/0 — Maveo app appears to have stolen the session; drive a Loxone reclaim trigger off this'), ENT_QUOTES, 'UTF-8') . '</li>';
 echo '<li><code>&lt;prefix&gt;/transport</code>, <code>&lt;prefix&gt;/backoff_until_ms</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPIC_DIAG', 'retained diagnostic values (transport state; > 0 while auto-reclaim is paused)'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>&lt;prefix&gt;/last_error</code>, <code>&lt;prefix&gt;/health</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TOPIC_HEALTH', 'retained diagnose strings — perfect for a Loxone Statusbaustein on the tablet (e.g. "ok mqtt:connected door:closed light:off" or "warn mqtt:reclaiming takeover:1")'), ENT_QUOTES, 'UTF-8') . '</li>';
 echo '</ul>';
 
 // --- Door position codes (0..6) — useful for Loxone status block design ---

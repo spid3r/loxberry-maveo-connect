@@ -207,13 +207,30 @@ When **MQTT forward** is enabled in *Settings → Advanced settings*, the daemon
 <prefix>/session_takeover ← "1" while the Maveo app appears to have stolen the session retained
 <prefix>/transport        ← "connected" / "connecting" / "disconnected" / …            retained
 <prefix>/backoff_until_ms ← > 0 while auto-reclaim is paused after a contention burst  retained
+<prefix>/last_error       ← daemon's last surfaced error message, "" when clean        retained
+<prefix>/health           ← one-line summary, e.g. "ok mqtt:connected door:closed …"   retained
 ```
 
-The connection topics are **retained**, so a Loxone Statusbaustein gets the last
-known value the moment the broker comes up — no need to wait for the next
-state change. The door / light topics stay non-retained because they always
-fire shortly after a real event and we don't want stale values to override
-fresh ones after a reboot.
+The connection / diagnostic topics are **retained**, so a Loxone Statusbaustein
+gets the last known value the moment the broker comes up — no need to wait for
+the next state change. The door / light topics stay non-retained because they
+always fire shortly after a real event and we don't want stale values to
+override fresh ones after a reboot.
+
+The `health` line uses a tiny grammar designed to fit a Loxone Statusbaustein
+text field (no newlines, ASCII, key:value separated by spaces):
+
+```text
+ok    mqtt:connected door:closed light:off
+warn  mqtt:reclaiming takeover:1 backoff:118s door:closed
+error settings_missing
+error mqtt:disconnected door:closed         ← daemon hit a real error; details in last_error
+```
+
+Drive a colored Loxone widget off the leading `ok` / `warn` / `error` token; show
+the rest of the line as the actual diagnose-text on the tablet. `last_error`
+carries the raw error message (or empty string when fine) so you can also wire
+a separate Statusbaustein "Letzter Fehler".
 
 There is **no** combined `<prefix>/state` JSON topic: publishing it duplicated the same
 values when the LoxBerry MQTT Gateway expands JSON into extra flat topics (`##` in names).

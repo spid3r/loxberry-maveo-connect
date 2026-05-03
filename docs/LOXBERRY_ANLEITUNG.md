@@ -108,7 +108,18 @@ Zusätzlich zu Tor- und Lichtwerten publiziert das Plugin (wenn MQTT-Forward akt
 <prefix>/session_takeover 1 / 0   — letzte Trennung sieht nach App-Übernahme aus
 <prefix>/transport        connected | connecting | disconnected | …
 <prefix>/backoff_until_ms > 0 solange die Auto-Reclaim-Pause läuft
+<prefix>/last_error       letzte Fehlermeldung des Daemons, "" wenn alles gut
+<prefix>/health           Einzeiler à la "ok mqtt:connected door:closed light:off"
 ```
+
+`<prefix>/health` und `<prefix>/last_error` sind **retained** — eignen sich gut für einen **Loxone-Statusbaustein „Garage Diagnose"**, der dir auf dem Tablet den aktuellen Zustand als Text zeigt:
+
+- `ok mqtt:connected door:closed light:off` — alles in Ordnung
+- `warn mqtt:reclaiming takeover:1 backoff:118s door:closed` — Maveo-App hat Sitzung übernommen, Auto-Reclaim noch in Pause
+- `error settings_missing` — Plugin nicht fertig konfiguriert
+- `error mqtt:disconnected …` — echter Fehler, Details stehen in `last_error`
+
+Das führende Token (`ok` / `warn` / `error`) kannst du in einem Formelbaustein abgreifen, um z. B. einen Statusbaustein einzufärben.
 
 Dieselben Felder sind auch in `status.php` enthalten (`mqttConnected`, `sessionTakeover`, `transport`, `backoffUntilMs`) — für reine HTTP-Polling-Setups.
 

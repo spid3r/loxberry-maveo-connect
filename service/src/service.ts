@@ -121,23 +121,75 @@ async function hydrateStickSnapshotAfterMqttRecovery(context: string): Promise<v
 
 /**
  * Build the current status snapshot, push it to long-poll listeners (the WebUI
- * Status page) AND fan it out to the four retained Loxone-friendly MQTT topics
- * (`mqtt_connected`, `session_takeover`, `transport`, `backoff_until_ms`).
+ * Status page) AND fan it out to the retained Loxone-friendly MQTT topics:
+ *   - connection state: `mqtt_connected`, `session_takeover`, `transport`,
+ *     `backoff_until_ms`
+ *   - diagnostics:      `last_error`, `health`
  *
  * Called from every state-change site so the WebUI and Loxone always stay in
- * sync — Loxone can drive a `Logikbaustein → reclaim.php` rule purely off the
- * `session_takeover` topic without ever touching the daemon HTTP API directly.
+ * sync — a Loxone Statusbaustein can read `<prefix>/health` directly to show
+ * a one-line diagnose-summary, while a Logikbaustein can drive a manual
+ * reclaim off `session_takeover` without ever touching the daemon HTTP API.
  */
 function broadcastStatus(): void {
   const snap = buildStatus(client, settings, maveoEnv, mutable);
   pushStatusIfChanged(snap);
   const sessionLoss = snap.sessionLoss as { suspectedRemoteSessionTakeover?: boolean } | null | undefined;
+  const sessionTakeover = sessionLoss?.suspectedRemoteSessionTakeover === true;
+  const transport = typeof snap.transport === "string" ? snap.transport : "unknown";
+  const backoffUntilMs = typeof snap.backoffUntilMs === "number" ? snap.backoffUntilMs : 0;
   forwarder.publishConnection({
     mqttConnected: snap.mqttConnected === true,
-    sessionTakeover: sessionLoss?.suspectedRemoteSessionTakeover === true,
-    transport: typeof snap.transport === "string" ? snap.transport : "unknown",
-    backoffUntilMs: typeof snap.backoffUntilMs === "number" ? snap.backoffUntilMs : 0,
+    sessionTakeover,
+    transport,
+    backoffUntilMs,
   });
+  forwarder.publishHealth({
+    lastError: typeof snap.lastError === "string" && snap.lastError.length > 0 ? snap.lastError : null,
+    healthLine: buildHealthLine(snap, { sessionTakeover, transport, backoffUntilMs }),
+  });
+}
+
+/**
+ * Compose the one-line `<prefix>/health` payload — e.g.
+ *   `ok mqtt:connected door:closed light:off`
+ *   `warn mqtt:disconnected takeover:1 backoff:118s door:closed`
+ *   `error settings_missing`
+ *
+ * The leading token (`ok` / `warn` / `error`) is the part a Loxone formula
+ * baustein can grep on if you want to color a Statusbaustein. Every following
+ * `key:value` pair is whitespace-separated, ASCII-only, no newlines — fits
+ * the Statusbaustein's text field on a phone screen.
+ */
+function buildHealthLine(
+  snap: Record<string, unknown>,
+  ctx: { sessionTakeover: boolean; transport: string; backoffUntilMs: number },
+): string {
+  const settingsOk = snap.settingsOk === true;
+  const clientReady = snap.clientReady === true;
+  const lastError = typeof snap.lastError === "string" && snap.lastError.length > 0 ? snap.lastError : "";
+  const mqttConnected = snap.mqttConnected === true;
+  const doorLabel = typeof snap.doorLabel === "string" ? snap.doorLabel : "";
+  const lightOn = snap.lightOn === true ? "on" : snap.lightOn === false ? "off" : "";
+
+  let level: "ok" | "warn" | "error" = "ok";
+  if (lastError) level = "error";
+  else if (!settingsOk || !clientReady) level = "error";
+  else if (!mqttConnected || ctx.sessionTakeover || ctx.backoffUntilMs > Date.now()) level = "warn";
+
+  const parts: string[] = [level];
+  if (level === "error" && !settingsOk) {
+    parts.push("settings_missing");
+    return parts.join(" ");
+  }
+
+  parts.push(`mqtt:${ctx.transport || (mqttConnected ? "connected" : "disconnected")}`);
+  if (ctx.sessionTakeover) parts.push("takeover:1");
+  const remaining = ctx.backoffUntilMs - Date.now();
+  if (remaining > 0) parts.push(`backoff:${Math.max(1, Math.round(remaining / 1000))}s`);
+  if (doorLabel) parts.push(`door:${doorLabel}`);
+  if (lightOn) parts.push(`light:${lightOn}`);
+  return parts.join(" ");
 }
 
 function bindStickState() {

@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { MqttForwarder, type ConnectionSnapshot } from "../service/src/mqttForward.js";
+import { MqttForwarder, type ConnectionSnapshot, type HealthSnapshot } from "../service/src/mqttForward.js";
 import { createLogger } from "../service/src/logger.js";
 
 type Captured = { topic: string; payload: string; opts?: { qos?: number; retain?: boolean } };
@@ -102,5 +102,52 @@ describe("MqttForwarder.publishConnection", () => {
       backoffUntilMs: 0,
     });
     /** No throw, no side-effect — just early-return. */
+  });
+});
+
+describe("MqttForwarder.publishHealth", () => {
+  it("publishes <prefix>/last_error and <prefix>/health retained", () => {
+    const log = createLogger("error", "/tmp/test-maveo-mqtt-forward.log");
+    const f = new MqttForwarder(log);
+    const { sent } = attachFakeBroker(f);
+
+    const snap: HealthSnapshot = {
+      lastError: "Maveo connect failed: invalid_credentials",
+      healthLine: "error mqtt:disconnected",
+    };
+    f.publishHealth(snap);
+
+    const topics = sent.map((s) => s.topic);
+    expect(topics).to.include.members(["maveo/last_error", "maveo/health"]);
+    for (const c of sent) {
+      expect(c.opts?.retain, `retain on ${c.topic}`).to.equal(true);
+    }
+    const err = sent.find((s) => s.topic === "maveo/last_error")!;
+    expect(err.payload).to.equal("Maveo connect failed: invalid_credentials");
+    const h = sent.find((s) => s.topic === "maveo/health")!;
+    expect(h.payload).to.equal("error mqtt:disconnected");
+  });
+
+  it("clears <prefix>/last_error with an empty string when no error", () => {
+    const log = createLogger("error", "/tmp/test-maveo-mqtt-forward.log");
+    const f = new MqttForwarder(log);
+    const { sent } = attachFakeBroker(f);
+
+    f.publishHealth({ lastError: null, healthLine: "ok mqtt:connected door:closed light:off" });
+
+    const err = sent.find((s) => s.topic === "maveo/last_error")!;
+    expect(err.payload).to.equal("");
+    expect(err.opts?.retain).to.equal(true);
+  });
+
+  it("suppresses duplicate snapshots", () => {
+    const log = createLogger("error", "/tmp/test-maveo-mqtt-forward.log");
+    const f = new MqttForwarder(log);
+    const { sent } = attachFakeBroker(f);
+    const snap: HealthSnapshot = { lastError: null, healthLine: "ok mqtt:connected" };
+    f.publishHealth(snap);
+    const after1 = sent.length;
+    f.publishHealth({ ...snap });
+    expect(sent.length).to.equal(after1);
   });
 });

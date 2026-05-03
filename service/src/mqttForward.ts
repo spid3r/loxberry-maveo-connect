@@ -24,6 +24,27 @@ export type ConnectionSnapshot = {
   backoffUntilMs: number;
 };
 
+/**
+ * Compact, single-line diagnostic snapshot intended to be shown in a Loxone
+ * Statusbaustein on the user's tablet — the Loxone app cannot embed a real
+ * webview-style log viewer (the Webview block opens the system browser), so
+ * we publish two retained topics that fit a Statusbaustein's text field:
+ *
+ *   <prefix>/last_error  → daemon's last surfaced error string, or "" when clean
+ *   <prefix>/health      → e.g. `ok mqtt:connected door:closed light:off`
+ *                          or  `warn mqtt:reclaiming takeover:1 backoff:118s`
+ *
+ * Retained = the Statusbaustein keeps showing the last value across broker
+ * restarts. The fields the user can read off the health line at a glance are
+ * `<level> mqtt:<transport> [takeover:1] [backoff:Ns] [door:<label>] [light:on|off]`.
+ */
+export type HealthSnapshot = {
+  /** Free-form last error from the daemon, or null/"" when everything is fine. */
+  lastError: string | null;
+  /** One short line, ASCII, no newlines. Use `buildHealthLine` in service.ts to compose. */
+  healthLine: string;
+};
+
 export class MqttForwarder {
   private client: MqttClient | undefined;
   private prefix = "maveo";
@@ -36,6 +57,8 @@ export class MqttForwarder {
    * don't need to spam the broker). Updated by `publishConnection` itself.
    */
   private lastConn: ConnectionSnapshot | undefined;
+  /** Last health snapshot we published, so `publishHealth` can suppress no-ops. */
+  private lastHealth: HealthSnapshot | undefined;
   /** Throttle identical forward errors: one WARN per minute, counts between. */
   private forwardErrorThrottle:
     | { signature: string; windowStartMs: number; hitsInWindow: number; lastWarnMs: number }
@@ -132,6 +155,7 @@ export class MqttForwarder {
       this.client = undefined;
     }
     this.lastConn = undefined;
+    this.lastHealth = undefined;
   }
 
   /**
@@ -169,6 +193,37 @@ export class MqttForwarder {
       this.lastConn = { ...snapshot };
     } catch (e) {
       this.log.warn("MQTT forward: connection publish failed", { error: String(e) });
+    }
+  }
+
+  /**
+   * Publish the at-a-glance health line + last-error string for the Loxone
+   * Statusbaustein. Both topics are retained so the tablet sees the latest
+   * value the moment it reconnects to the broker, which is exactly what you
+   * want for a "is the garage daemon happy?" widget.
+   *
+   * `last_error` carries an empty string while the daemon is clean — that
+   * clears the Statusbaustein text without us needing a separate "no error"
+   * sentinel value. The `healthLine` always has *something* to show.
+   */
+  publishHealth(snapshot: HealthSnapshot): void {
+    const c = this.client;
+    if (!c?.connected) {
+      this.lastHealth = undefined;
+      return;
+    }
+    const errStr = snapshot.lastError ?? "";
+    const prev = this.lastHealth;
+    if (prev && prev.healthLine === snapshot.healthLine && (prev.lastError ?? "") === errStr) {
+      return;
+    }
+    const p = this.prefix;
+    try {
+      c.publish(`${p}/last_error`, errStr, { qos: 0, retain: true });
+      c.publish(`${p}/health`, snapshot.healthLine, { qos: 0, retain: true });
+      this.lastHealth = { lastError: errStr, healthLine: snapshot.healthLine };
+    } catch (e) {
+      this.log.warn("MQTT forward: health publish failed", { error: String(e) });
     }
   }
 
