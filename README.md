@@ -179,16 +179,58 @@ Inside the *Erweiterte Einstellungen / Advanced settings* `<details>` block:
 The probe endpoint (`POST /api/maveo/probe`) **also** accepts these overrides as
 request fields, so you can test EU vs US **before** committing them to disk.
 
+### 3) Log housekeeping
+
+The daemon writes to `$LBPLOG/maveoconnect/daemon.log`. To keep the LoxBerry SD
+card safe, the plugin **rotates the log itself**:
+
+- **`daemon.log`** flips to `daemon.log.1` once it crosses ~1 MiB; one backup is
+  kept (≈ 2 MiB cap total). Override via `settings.json → logging.maxBytes` and
+  `logging.keepFiles`; set `keepFiles: 0` to disable rotation.
+- **`daemon.shell.log`** (nohup output from start/stop) is rotated to `.1` at
+  daemon start when it exceeds ~1 MiB.
+- The **Log** page has a **„Log löschen“ / „Clear log“** button that truncates
+  the live file, drops rotated backups, and clears the in-memory ring buffer.
+  Internally this is just `POST /api/log/clear` against the local daemon — same
+  Apache Basic Auth as the rest of the WebUI.
+
 ## MQTT topics
 
 When **MQTT forward** is enabled in *Settings → Advanced settings*, the daemon publishes
 **non-retained** UTF-8 payloads to your broker (default prefix `maveo`, no trailing slash stored):
 
 ```text
-<prefix>/door_position   ← door position code (integer 0…6, Maveo / BlueFi encoding)
-<prefix>/door_label      ← English status token from the stick client (e.g. closed, open)
-<prefix>/light_on        ← "1" or "0"
+<prefix>/door_position    ← door position code (integer 0…6, Maveo / BlueFi encoding)   non-retained
+<prefix>/door_label       ← English status token from the stick client (e.g. closed, open) non-retained
+<prefix>/light_on         ← "1" or "0"                                                  non-retained
+<prefix>/mqtt_connected   ← "1" / "0" — link to the Marantec cloud is alive            retained
+<prefix>/session_takeover ← "1" while the Maveo app appears to have stolen the session retained
+<prefix>/transport        ← "connected" / "connecting" / "disconnected" / …            retained
+<prefix>/backoff_until_ms ← > 0 while auto-reclaim is paused after a contention burst  retained
+<prefix>/last_error       ← daemon's last surfaced error message, "" when clean        retained
+<prefix>/health           ← one-line summary, e.g. "ok mqtt:connected door:closed …"   retained
 ```
+
+The connection / diagnostic topics are **retained**, so a Loxone Statusbaustein
+gets the last known value the moment the broker comes up — no need to wait for
+the next state change. The door / light topics stay non-retained because they
+always fire shortly after a real event and we don't want stale values to
+override fresh ones after a reboot.
+
+The `health` line uses a tiny grammar designed to fit a Loxone Statusbaustein
+text field (no newlines, ASCII, key:value separated by spaces):
+
+```text
+ok    mqtt:connected door:closed light:off
+warn  mqtt:reclaiming takeover:1 backoff:118s door:closed
+error settings_missing
+error mqtt:disconnected door:closed         ← daemon hit a real error; details in last_error
+```
+
+Drive a colored Loxone widget off the leading `ok` / `warn` / `error` token; show
+the rest of the line as the actual diagnose-text on the tablet. `last_error`
+carries the raw error message (or empty string when fine) so you can also wire
+a separate Statusbaustein "Letzter Fehler".
 
 There is **no** combined `<prefix>/state` JSON topic: publishing it duplicated the same
 values when the LoxBerry MQTT Gateway expands JSON into extra flat topics (`##` in names).
@@ -203,7 +245,73 @@ There are **no external CDN libraries** in the plugin web UI — only embedded C
 4. Subscribe to the topics above, for example:
    - **Virtual input (digital)** on `…/light_on` — map incoming text `1` / `0` (or use a small conversion if your Loxone build expects different comparators).
    - **Virtual input (analog)** or **status** on `…/door_position` — integer 0…6; optionally drive icons or logic from `…/door_label`.
-5. Open/close **commands** from Loxone to the garage are **not** exposed on this MQTT channel (only state **out**). Use Loxone controls that talk to your existing door actors, or operate the door from the plugin **Status** tab / Maveo app.
+5. Open/close **commands** from Loxone are sent **over HTTP**, not MQTT — see *Loxone control via Virtual Outputs* below. The MQTT channel intentionally stays status-only.
+
+#### Door position codes (`door_position` / `status.php`)
+
+| Code | Label | Meaning |
+|------|-------|---------|
+| 0 | `stopped` | Motor stopped between end positions |
+| 1 | `opening` | Door opening |
+| 2 | `closing` | Door closing |
+| 3 | `open` | Fully open |
+| 4 | `closed` | Fully closed |
+| 5 | `intermediateOpen` | Intermediate / ventilation position |
+| 6 | `intermediateClosed` | Intermediate position toward closed |
+
+For a Loxone status block: `open = 3 or 5`, `closed = 4`, `moving = 1 or 2`. `light_on` is `1`/`0`.
+
+### Loxone control via Virtual Outputs
+
+The plugin exposes a small, **opt-in HTTP API** under the standard LoxBerry plugin path. The Miniserver hits these URLs from a Virtual Output — there is **no extra port** to open, the Node daemon stays bound to `127.0.0.1` and the internal token never leaves the LoxBerry.
+
+1. In **Settings → MQTT & Loxone integration** turn on **Loxone control API** and save (off by default).
+2. In **Loxone Config**, add a **Virtual Output** for each command. Authentication uses the **standard LoxBerry plugin Basic Auth** sent inline in the URL.
+3. Endpoints (replace `LB-IP` with your LoxBerry's IP / hostname; `loxberry:loxberry` with your LoxBerry plugin credentials):
+
+```text
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=open
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=close
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=stop
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=ventilate
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=on
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=off
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=toggle
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/reclaim.php
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?fmt=text&lines=80
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?level=debug
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/log.php?level=info
+```
+
+Successful actions return HTTP `200` with the body `OK`; failures return `4xx`/`5xx` with `ERR <message>`. While the toggle is off, every endpoint replies `503 disabled`. `status.php` returns a compact JSON snapshot — useful as a fallback for setups without an MQTT broker:
+
+```json
+{"doorPosition":3,"doorLabel":"open","lightOn":false,"mqttConnected":true,"sessionTakeover":false,"transport":"connected","backoffUntilMs":0,"stickSerial":"…","lastError":null}
+```
+
+`log.php` returns the current daemon log level plus the last lines from the ring
+buffer (default 60). Pass `?fmt=text&lines=N` to get plain text for a Loxone
+Webview/URL-Befehl, or `?level=debug|info|warn|error` to flip the **runtime**
+log level on the fly — the change is intentional **not persisted**, so a daemon
+restart restores the level saved in `settings.json`. That is exactly what you
+want for short ad-hoc diagnostics from the Loxone app: turn debug on, watch the
+log, turn it back off.
+
+Don't expose this URL space to the open internet — Basic Auth is fine inside a home network, which is the LoxBerry default.
+
+#### Wiring "manual reclaim on session takeover" in Loxone Config
+
+1. Subscribe to `<prefix>/session_takeover` and `<prefix>/mqtt_connected` (or
+   poll `…/api/status.php` every 30 s and read `sessionTakeover` /
+   `mqttConnected`).
+2. Use a **Logikbaustein → Flankenerkennung** on `session_takeover == 1` (or
+   `mqtt_connected == 0` for longer than ~30 s, with a Treppenlicht-/
+   Verzögerungsbaustein to debounce).
+3. Wire the output to a **Virtueller HTTP-Ausgang** that calls
+   `…/api/reclaim.php`. Optionally gate it behind `backoff_until_ms == 0`, so
+   no reclaim is attempted while the daemon is in its post-burst pause.
 
 Door movement is reflected as soon as the Marantec cloud pushes stick state; the admin **Status** page **polls** the daemon about every **2 seconds** so the UI stays fresh without WebSockets. Long-poll (`/api/status/wait`) is still implemented server-side for optional use; the bundled UI prefers simple polling for fewer moving parts behind Apache.
 

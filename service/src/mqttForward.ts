@@ -8,12 +8,57 @@ import { maveoDoorPositionLabel } from "maveo-connect-stick-client";
 const FORWARD_RECONNECT_MS = 30_000;
 const FORWARD_ERROR_WARN_INTERVAL_MS = 60_000;
 
+/**
+ * Connection-state snapshot that drives the retained Loxone-friendly topics:
+ * `<prefix>/mqtt_connected`, `<prefix>/session_takeover`, `<prefix>/transport`,
+ * `<prefix>/backoff_until_ms`. Loxone HTTP-poll setups can also read all of
+ * this via `…/api/status.php`, but the MQTT path is push-based and cheaper.
+ */
+export type ConnectionSnapshot = {
+  mqttConnected: boolean;
+  /** True iff the last MQTT loss looks like the Maveo app stole the session. Cleared on recovery. */
+  sessionTakeover: boolean;
+  /** Library-reported transport state ("connected" | "connecting" | "disconnected" | "reconnecting" …). */
+  transport: string;
+  /** > 0 while the auto-reclaim burst-pause is active; 0 otherwise. */
+  backoffUntilMs: number;
+};
+
+/**
+ * Compact, single-line diagnostic snapshot intended to be shown in a Loxone
+ * Statusbaustein on the user's tablet — the Loxone app cannot embed a real
+ * webview-style log viewer (the Webview block opens the system browser), so
+ * we publish two retained topics that fit a Statusbaustein's text field:
+ *
+ *   <prefix>/last_error  → daemon's last surfaced error string, or "" when clean
+ *   <prefix>/health      → e.g. `ok mqtt:connected door:closed light:off`
+ *                          or  `warn mqtt:reclaiming takeover:1 backoff:118s`
+ *
+ * Retained = the Statusbaustein keeps showing the last value across broker
+ * restarts. The fields the user can read off the health line at a glance are
+ * `<level> mqtt:<transport> [takeover:1] [backoff:Ns] [door:<label>] [light:on|off]`.
+ */
+export type HealthSnapshot = {
+  /** Free-form last error from the daemon, or null/"" when everything is fine. */
+  lastError: string | null;
+  /** One short line, ASCII, no newlines. Use `buildHealthLine` in service.ts to compose. */
+  healthLine: string;
+};
+
 export class MqttForwarder {
   private client: MqttClient | undefined;
   private prefix = "maveo";
   private log: Logger;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private pending: { door?: MaveoDoorPosition; light?: boolean } = {};
+  /**
+   * Last connection-state snapshot we published, so we can suppress duplicate
+   * publishes (a Loxone Statusbaustein is fine with retained-once values; we
+   * don't need to spam the broker). Updated by `publishConnection` itself.
+   */
+  private lastConn: ConnectionSnapshot | undefined;
+  /** Last health snapshot we published, so `publishHealth` can suppress no-ops. */
+  private lastHealth: HealthSnapshot | undefined;
   /** Throttle identical forward errors: one WARN per minute, counts between. */
   private forwardErrorThrottle:
     | { signature: string; windowStartMs: number; hitsInWindow: number; lastWarnMs: number }
@@ -108,6 +153,77 @@ export class MqttForwarder {
         /* ignore */
       }
       this.client = undefined;
+    }
+    this.lastConn = undefined;
+    this.lastHealth = undefined;
+  }
+
+  /**
+   * Publish the current connection snapshot to four retained topics under
+   * `<prefix>/`. Retained = true so a Loxone Statusbaustein sees the last
+   * known value immediately on broker reconnect (otherwise we'd only ever
+   * fire on transitions and the block could sit empty for hours).
+   *
+   * Suppresses no-op publishes when nothing changed, and silently no-ops when
+   * the forwarder is disabled / not connected to the LoxBerry broker —
+   * upstream just calls this on every relevant event.
+   */
+  publishConnection(snapshot: ConnectionSnapshot): void {
+    const c = this.client;
+    if (!c?.connected) {
+      this.lastConn = undefined;
+      return;
+    }
+    const prev = this.lastConn;
+    if (
+      prev &&
+      prev.mqttConnected === snapshot.mqttConnected &&
+      prev.sessionTakeover === snapshot.sessionTakeover &&
+      prev.transport === snapshot.transport &&
+      prev.backoffUntilMs === snapshot.backoffUntilMs
+    ) {
+      return;
+    }
+    const p = this.prefix;
+    try {
+      c.publish(`${p}/mqtt_connected`, snapshot.mqttConnected ? "1" : "0", { qos: 0, retain: true });
+      c.publish(`${p}/session_takeover`, snapshot.sessionTakeover ? "1" : "0", { qos: 0, retain: true });
+      c.publish(`${p}/transport`, snapshot.transport, { qos: 0, retain: true });
+      c.publish(`${p}/backoff_until_ms`, String(snapshot.backoffUntilMs), { qos: 0, retain: true });
+      this.lastConn = { ...snapshot };
+    } catch (e) {
+      this.log.warn("MQTT forward: connection publish failed", { error: String(e) });
+    }
+  }
+
+  /**
+   * Publish the at-a-glance health line + last-error string for the Loxone
+   * Statusbaustein. Both topics are retained so the tablet sees the latest
+   * value the moment it reconnects to the broker, which is exactly what you
+   * want for a "is the garage daemon happy?" widget.
+   *
+   * `last_error` carries an empty string while the daemon is clean — that
+   * clears the Statusbaustein text without us needing a separate "no error"
+   * sentinel value. The `healthLine` always has *something* to show.
+   */
+  publishHealth(snapshot: HealthSnapshot): void {
+    const c = this.client;
+    if (!c?.connected) {
+      this.lastHealth = undefined;
+      return;
+    }
+    const errStr = snapshot.lastError ?? "";
+    const prev = this.lastHealth;
+    if (prev && prev.healthLine === snapshot.healthLine && (prev.lastError ?? "") === errStr) {
+      return;
+    }
+    const p = this.prefix;
+    try {
+      c.publish(`${p}/last_error`, errStr, { qos: 0, retain: true });
+      c.publish(`${p}/health`, snapshot.healthLine, { qos: 0, retain: true });
+      this.lastHealth = { lastError: errStr, healthLine: snapshot.healthLine };
+    } catch (e) {
+      this.log.warn("MQTT forward: health publish failed", { error: String(e) });
     }
   }
 

@@ -39,6 +39,17 @@ export type PluginSettings = {
   };
   logging?: {
     level?: LogLevelName;
+    /**
+     * Rotate `daemon.log` once it grows past this many bytes. Default 1 MiB.
+     * Combined with `keepFiles` this caps total on-disk log usage in
+     * `$LBPLOG/maveoconnect/`. Set to 0 to disable rotation entirely.
+     */
+    maxBytes?: number;
+    /**
+     * Number of `daemon.log.N` backups to retain (1 = keep one rotated copy).
+     * Total disk usage ≈ `(keepFiles + 1) × maxBytes`.
+     */
+    keepFiles?: number;
   };
   mqttForward?: {
     enabled?: boolean;
@@ -46,6 +57,16 @@ export type PluginSettings = {
     username?: string;
     password?: string;
     topicPrefix?: string;
+  };
+  /**
+   * Opt-in toggle for the PHP-wrapped Loxone control endpoints under
+   * `webfrontend/htmlauth/api/*.php`. The Node daemon does NOT read this — the
+   * field is persisted purely so the PHP layer can enforce 503 when off, and so
+   * the WebUI can render the toggle. Default `false` keeps the surface minimal
+   * for users who just consume MQTT status.
+   */
+  loxoneApi?: {
+    enabled?: boolean;
   };
 };
 
@@ -155,13 +176,16 @@ const defaultSettings = (): PluginSettings => ({
     port: 47832,
     listenHost: "127.0.0.1",
   },
-  logging: { level: "info" },
+  logging: { level: "info", maxBytes: 1024 * 1024, keepFiles: 1 },
   mqttForward: {
     enabled: false,
     brokerUrl: "mqtt://127.0.0.1:1883",
     username: "",
     password: "",
     topicPrefix: "maveo",
+  },
+  loxoneApi: {
+    enabled: false,
   },
 });
 
@@ -207,6 +231,7 @@ function deepMerge(a: PluginSettings, b: Partial<PluginSettings>): PluginSetting
     daemon: { ...a.daemon, ...(b.daemon ?? {}) },
     logging: { ...a.logging, ...(b.logging ?? {}) },
     mqttForward: { ...a.mqttForward, ...(b.mqttForward ?? {}) },
+    loxoneApi: { ...a.loxoneApi, ...(b.loxoneApi ?? {}) },
   };
 }
 

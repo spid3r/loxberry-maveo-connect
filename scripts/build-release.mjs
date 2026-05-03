@@ -30,8 +30,40 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const staging = path.join(root, "dist-staging", "maveoconnect");
 
+/**
+ * Spawn a child build step with a *cleaned* environment.
+ *
+ * Why bother: when this script runs inside a terminal that has VS Code's
+ * "Auto Attach" enabled (or any other inspector wrapper), Node receives
+ * `NODE_OPTIONS=--require "C:\\Program Files\\Microsoft VS Code\\…"` plus a
+ * couple of `VSCODE_INSPECTOR_OPTIONS` blobs. On Windows those strings travel
+ * through `cmd.exe` (because `npm` itself is a `.cmd` shim) and lose their
+ * outer quotes, which breaks both ways:
+ *   - `node` boots with a mangled `--require` path (slashes and spaces stripped)
+ *   - `cmd.exe` tries to execute the leading path fragment (`C:\Program`) as
+ *     a command and fails with "is not recognized as a name of a cmdlet…"
+ * The build itself never needs the debugger, so the safest, least-magical fix
+ * is to strip the offending vars from the child env — the parent shell keeps
+ * them, so attaching to a *manual* `node service/dist/service.mjs` later
+ * still works.
+ */
+function cleanedChildEnv() {
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) {
+    if (k === "NODE_OPTIONS" || k === "VSCODE_INSPECTOR_OPTIONS" || k.startsWith("VSCODE_NLS_CONFIG")) {
+      delete env[k];
+    }
+  }
+  return env;
+}
+
 function run(cmd, cwd, args) {
-  const r = spawnSync(cmd, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
+  const r = spawnSync(cmd, args, {
+    cwd,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    env: cleanedChildEnv(),
+  });
   if ((r.status ?? 1) !== 0) process.exit(r.status ?? 1);
 }
 

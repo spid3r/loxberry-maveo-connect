@@ -76,6 +76,27 @@ shell_log() {
   printf '%s %s\n' "$(date -Iseconds)" "$*" >>"$SHELL_LOG" 2>/dev/null || true
 }
 
+# Rotate $SHELL_LOG to .1 if it grew past ~1 MiB.
+# Called from service_start so we rotate at most once per restart — that is enough
+# in practice because nohup output here is sparse (LOGSTART/LOGEND + crash dumps),
+# and we don't want a long-running daemon to keep writing into an unrotated file.
+SHELL_LOG_MAX_BYTES="${MAVOECONNECT_SHELL_LOG_MAX_BYTES:-1048576}"
+rotate_shell_log_if_needed() {
+  if [ ! -f "$SHELL_LOG" ]; then
+    return 0
+  fi
+  local size
+  size=$(stat -c%s "$SHELL_LOG" 2>/dev/null || stat -f%z "$SHELL_LOG" 2>/dev/null || echo 0)
+  if [ -z "$size" ] || ! [ "$size" -ge 0 ] 2>/dev/null; then
+    return 0
+  fi
+  if [ "$size" -ge "$SHELL_LOG_MAX_BYTES" ]; then
+    mv -f "$SHELL_LOG" "${SHELL_LOG}.1" 2>/dev/null || true
+    : >"$SHELL_LOG" 2>/dev/null || true
+    chown loxberry:loxberry "$SHELL_LOG" 2>/dev/null || true
+  fi
+}
+
 is_running() {
   if [ ! -f "$PIDFILE" ]; then
     return 1
@@ -117,6 +138,7 @@ service_start() {
     return 1
   fi
 
+  rotate_shell_log_if_needed
   shell_log "LOGSTART node_bin=$NODE_BIN service=$SERVICE_JS user=$(id -un)"
   cd "$BINDIR" || return 1
   # Detach properly — survives loss of the controlling terminal (postroot, ssh, etc.).

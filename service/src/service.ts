@@ -39,7 +39,10 @@ function requireEnv(name: string, v: string): string {
 const logFile = join(LOG_DIR || "/tmp", "daemon.log");
 
 let settings: PluginSettings = loadSettingsFile(requireEnv("MAVOECONNECT_CONFIG", CONFIG_PATH));
-const log: Logger = createLogger(settings.logging?.level ?? "info", logFile);
+const log: Logger = createLogger(settings.logging?.level ?? "info", logFile, {
+  maxBytes: settings.logging?.maxBytes,
+  keepFiles: settings.logging?.keepFiles,
+});
 const forwarder = new MqttForwarder(log);
 
 let maveoEnv: NodeJS.ProcessEnv = settingsToMaveoEnv(settings, process.env);
@@ -113,7 +116,80 @@ async function hydrateStickSnapshotAfterMqttRecovery(context: string): Promise<v
   }
   mutable.lastSessionLoss = null;
   mutable.lastError = null;
-  pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+  broadcastStatus();
+}
+
+/**
+ * Build the current status snapshot, push it to long-poll listeners (the WebUI
+ * Status page) AND fan it out to the retained Loxone-friendly MQTT topics:
+ *   - connection state: `mqtt_connected`, `session_takeover`, `transport`,
+ *     `backoff_until_ms`
+ *   - diagnostics:      `last_error`, `health`
+ *
+ * Called from every state-change site so the WebUI and Loxone always stay in
+ * sync — a Loxone Statusbaustein can read `<prefix>/health` directly to show
+ * a one-line diagnose-summary, while a Logikbaustein can drive a manual
+ * reclaim off `session_takeover` without ever touching the daemon HTTP API.
+ */
+function broadcastStatus(): void {
+  const snap = buildStatus(client, settings, maveoEnv, mutable);
+  pushStatusIfChanged(snap);
+  const sessionLoss = snap.sessionLoss as { suspectedRemoteSessionTakeover?: boolean } | null | undefined;
+  const sessionTakeover = sessionLoss?.suspectedRemoteSessionTakeover === true;
+  const transport = typeof snap.transport === "string" ? snap.transport : "unknown";
+  const backoffUntilMs = typeof snap.backoffUntilMs === "number" ? snap.backoffUntilMs : 0;
+  forwarder.publishConnection({
+    mqttConnected: snap.mqttConnected === true,
+    sessionTakeover,
+    transport,
+    backoffUntilMs,
+  });
+  forwarder.publishHealth({
+    lastError: typeof snap.lastError === "string" && snap.lastError.length > 0 ? snap.lastError : null,
+    healthLine: buildHealthLine(snap, { sessionTakeover, transport, backoffUntilMs }),
+  });
+}
+
+/**
+ * Compose the one-line `<prefix>/health` payload — e.g.
+ *   `ok mqtt:connected door:closed light:off`
+ *   `warn mqtt:disconnected takeover:1 backoff:118s door:closed`
+ *   `error settings_missing`
+ *
+ * The leading token (`ok` / `warn` / `error`) is the part a Loxone formula
+ * baustein can grep on if you want to color a Statusbaustein. Every following
+ * `key:value` pair is whitespace-separated, ASCII-only, no newlines — fits
+ * the Statusbaustein's text field on a phone screen.
+ */
+function buildHealthLine(
+  snap: Record<string, unknown>,
+  ctx: { sessionTakeover: boolean; transport: string; backoffUntilMs: number },
+): string {
+  const settingsOk = snap.settingsOk === true;
+  const clientReady = snap.clientReady === true;
+  const lastError = typeof snap.lastError === "string" && snap.lastError.length > 0 ? snap.lastError : "";
+  const mqttConnected = snap.mqttConnected === true;
+  const doorLabel = typeof snap.doorLabel === "string" ? snap.doorLabel : "";
+  const lightOn = snap.lightOn === true ? "on" : snap.lightOn === false ? "off" : "";
+
+  let level: "ok" | "warn" | "error" = "ok";
+  if (lastError) level = "error";
+  else if (!settingsOk || !clientReady) level = "error";
+  else if (!mqttConnected || ctx.sessionTakeover || ctx.backoffUntilMs > Date.now()) level = "warn";
+
+  const parts: string[] = [level];
+  if (level === "error" && !settingsOk) {
+    parts.push("settings_missing");
+    return parts.join(" ");
+  }
+
+  parts.push(`mqtt:${ctx.transport || (mqttConnected ? "connected" : "disconnected")}`);
+  if (ctx.sessionTakeover) parts.push("takeover:1");
+  const remaining = ctx.backoffUntilMs - Date.now();
+  if (remaining > 0) parts.push(`backoff:${Math.max(1, Math.round(remaining / 1000))}s`);
+  if (doorLabel) parts.push(`door:${doorLabel}`);
+  if (lightOn) parts.push(`light:${lightOn}`);
+  return parts.join(" ");
 }
 
 function bindStickState() {
@@ -131,6 +207,13 @@ function bindStickState() {
         door: u.doorPosition !== undefined ? maveoDoorPositionLabel(u.doorPosition) : undefined,
         light: u.lightOn,
       });
+      /**
+       * Keep `<prefix>/health` and `<prefix>/mqtt_connected` in sync with the
+       * actual stick traffic — if a state event arrives, MQTT is by definition
+       * up and the health snapshot may have changed (door label flipped). The
+       * forwarder's de-dup makes this cheap when nothing meaningful changed.
+       */
+      broadcastStatus();
     });
   } catch (e) {
     log.warn("bindStickState deferred — MQTT not ready yet", {
@@ -168,13 +251,13 @@ function wireClient() {
           backoffAfterBurstMs: info.backoffAfterBurstMs,
           hint: "Until backoffUntil, automatic reclaim is paused; use Status → MQTT buttons or wait.",
         });
-        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+        broadcastStatus();
       },
       onSessionContentionSkipped: (info) => {
         log.debug("MQTT auto-reclaim skipped (contention backoff active)", {
           backoffUntilMs: info.backoffUntilMs,
         });
-        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+        broadcastStatus();
       },
     }),
   );
@@ -185,7 +268,7 @@ function wireClient() {
       intentionalDisconnect: ev.intentionalDisconnect,
       suspectedRemoteSessionTakeover: ev.suspectedRemoteSessionTakeover,
     });
-    pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+    broadcastStatus();
   });
 }
 
@@ -203,7 +286,7 @@ function bindLifecycleAfterConnect(): void {
       if (e.kind === "manual_recover_finished" && !e.ok) {
         mutable.lastError = e.error instanceof Error ? e.error.message : String(e.error);
         log.error("Manual recover failed", { error: mutable.lastError });
-        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+        broadcastStatus();
       }
       if (e.kind === "manual_recover_finished" && e.ok) {
         /** Full snapshot + sessionLoss clear happens in `/api/reconnect` after await; avoid double MQTT reads here. */
@@ -223,14 +306,14 @@ async function connectMaveo(): Promise<void> {
   if (!client) {
     mutable.lastError = "Settings unvollständig — bitte E-Mail, Passwort, Cognito-Pool und Stick-Serial in den Einstellungen speichern.";
     log.warn(mutable.lastError);
-    pushStatusIfChanged(buildStatus(undefined, settings, maveoEnv, mutable));
+    broadcastStatus();
     return;
   }
   const m = settings.maveo;
   if (!m.email || !m.password || !m.cognitoIdentityPoolId || !m.thingName) {
     mutable.lastError = "Incomplete settings: email, password, Cognito pool, and stick serial are required.";
     log.error(mutable.lastError);
-    pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+    broadcastStatus();
     return;
   }
 
@@ -250,7 +333,7 @@ async function connectMaveo(): Promise<void> {
     log.error("Maveo connect failed", { error: mutable.lastError });
     mutable.connectedAtMs = null;
   }
-  pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+  broadcastStatus();
 }
 
 /**
@@ -267,6 +350,7 @@ async function reloadFromDisk(): Promise<void> {
     log.setLevel(newLogLevel);
     log.info("reloadFromDisk: log level changed", { level: newLogLevel });
   }
+  log.setRotation({ maxBytes: fresh.logging?.maxBytes, keepFiles: fresh.logging?.keepFiles });
 
   settings = fresh;
   maveoEnv = settingsToMaveoEnv(settings, process.env);
@@ -303,6 +387,7 @@ const handleRequest = createDaemonRequestHandler({
   bindStickState,
   log,
   reloadFromDisk,
+  broadcast: broadcastStatus,
 });
 
 function main() {

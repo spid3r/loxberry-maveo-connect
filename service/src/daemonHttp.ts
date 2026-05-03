@@ -296,9 +296,20 @@ export type DaemonRequestDeps = {
   getClient: () => StickClientPort | undefined;
   mutable: DaemonMutableState;
   bindStickState: () => void;
-  log: Logger & { getRecentLines(maxLines?: number): string[] };
+  log: Logger & {
+    getRecentLines(maxLines?: number): string[];
+    clear(): { truncated: boolean; removedBackups: number; ringEntriesCleared: number };
+  };
   /** Trigger settings reload from disk and rebuild client + reconnect; used by /api/reload + UI auto-restart hook. */
   reloadFromDisk?: () => Promise<void>;
+  /**
+   * Re-broadcast the current status to BOTH the long-poll listeners and the MQTT
+   * forwarder topics. Wired from service.ts to its `broadcastStatus()` so a
+   * manual `/api/reconnect` (which bypasses the auto-reclaim `onRecovered`
+   * callback) still updates `<prefix>/mqtt_connected`, `<prefix>/health`, etc.
+   * Optional so unit tests can construct a deps object without the forwarder.
+   */
+  broadcast?: () => void;
 };
 
 /** Single HTTP handler (auth + routing); production wired from `service.ts`. */
@@ -374,6 +385,57 @@ export function createDaemonRequestHandler(deps: DaemonRequestDeps) {
         });
 
         statusWaiters.push(entry);
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/log/level") {
+        /**
+         * Runtime log-level switch — used by `…/api/log.php?level=debug` so a
+         * Loxone "Diagnose-Modus EIN" virtual output can flip the daemon to
+         * verbose without anyone touching the Settings page. We deliberately
+         * do NOT persist into settings.json here: the change is meant to be
+         * temporary; on the next daemon restart the saved level wins again.
+         */
+        const body = await parseBody(req);
+        const candidate = String(body.level ?? "").toLowerCase();
+        const allowed = ["error", "warn", "info", "debug"] as const;
+        if (!allowed.includes(candidate as (typeof allowed)[number])) {
+          writeJson(res, 400, {
+            ok: false,
+            error: "invalid_level",
+            allowed,
+            message: "Use one of error / warn / info / debug.",
+          });
+          return;
+        }
+        const previous = deps.log.level;
+        deps.log.setLevel(candidate as (typeof allowed)[number]);
+        deps.log.info("log level changed via API", { previous, level: candidate, persisted: false });
+        writeJson(res, 200, {
+          ok: true,
+          message: `Log level set to ${candidate} (runtime only).`,
+          previous,
+          level: candidate,
+          persisted: false,
+        });
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/log/clear") {
+        /**
+         * Manual log purge from the WebUI: truncate `daemon.log`, drop rotated
+         * backups, and reset the in-memory ring buffer so the next /api/log/recent
+         * call returns an empty list. Returns a small report so the PHP layer can
+         * tell the user how many files were cleared. We re-emit a single info line
+         * after clearing so the log explicitly records that this happened.
+         */
+        const result = deps.log.clear();
+        deps.log.info("log cleared via API", result);
+        writeJson(res, 200, {
+          ok: true,
+          message: "Log geleert.",
+          ...result,
+        });
         return;
       }
 
@@ -457,9 +519,18 @@ export function createDaemonRequestHandler(deps: DaemonRequestDeps) {
         }
         deps.mutable.lastError = null;
         deps.mutable.lastSessionLoss = null;
-        const snap = buildStatus(c, settings, maveoEnv, deps.mutable);
-        pushStatusIfChanged(snap);
-        writeJson(res, 200, { ok: true, status: snap });
+        /**
+         * Use the service-level broadcaster so the MQTT forwarder also fires
+         * publishConnection / publishHealth — pushStatusIfChanged alone only
+         * wakes the WebUI long-poll. Falling back to a local push keeps unit
+         * tests that don't wire `broadcast` working.
+         */
+        if (deps.broadcast) {
+          deps.broadcast();
+        } else {
+          pushStatusIfChanged(buildStatus(c, settings, maveoEnv, deps.mutable));
+        }
+        writeJson(res, 200, { ok: true, status: buildStatus(c, settings, maveoEnv, deps.mutable) });
         return;
       }
 
