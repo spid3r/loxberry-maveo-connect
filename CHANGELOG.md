@@ -1,3 +1,7 @@
+## [1.0.1-beta.6](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1-beta.5...v1.0.1-beta.6) (2026-05-03)
+
+* fix(loxone): re-publish mqtt_connected/health after manual /api/reconnect
+
 ## [1.0.1-beta.5](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1-beta.4...v1.0.1-beta.5) (2026-05-03)
 
 * feat(loxone): publish retained last_error and health diagnose topics
