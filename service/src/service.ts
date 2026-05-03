@@ -207,6 +207,13 @@ function bindStickState() {
         door: u.doorPosition !== undefined ? maveoDoorPositionLabel(u.doorPosition) : undefined,
         light: u.lightOn,
       });
+      /**
+       * Keep `<prefix>/health` and `<prefix>/mqtt_connected` in sync with the
+       * actual stick traffic — if a state event arrives, MQTT is by definition
+       * up and the health snapshot may have changed (door label flipped). The
+       * forwarder's de-dup makes this cheap when nothing meaningful changed.
+       */
+      broadcastStatus();
     });
   } catch (e) {
     log.warn("bindStickState deferred — MQTT not ready yet", {
@@ -380,6 +387,7 @@ const handleRequest = createDaemonRequestHandler({
   bindStickState,
   log,
   reloadFromDisk,
+  broadcast: broadcastStatus,
 });
 
 function main() {

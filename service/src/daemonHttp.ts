@@ -302,6 +302,14 @@ export type DaemonRequestDeps = {
   };
   /** Trigger settings reload from disk and rebuild client + reconnect; used by /api/reload + UI auto-restart hook. */
   reloadFromDisk?: () => Promise<void>;
+  /**
+   * Re-broadcast the current status to BOTH the long-poll listeners and the MQTT
+   * forwarder topics. Wired from service.ts to its `broadcastStatus()` so a
+   * manual `/api/reconnect` (which bypasses the auto-reclaim `onRecovered`
+   * callback) still updates `<prefix>/mqtt_connected`, `<prefix>/health`, etc.
+   * Optional so unit tests can construct a deps object without the forwarder.
+   */
+  broadcast?: () => void;
 };
 
 /** Single HTTP handler (auth + routing); production wired from `service.ts`. */
@@ -511,9 +519,18 @@ export function createDaemonRequestHandler(deps: DaemonRequestDeps) {
         }
         deps.mutable.lastError = null;
         deps.mutable.lastSessionLoss = null;
-        const snap = buildStatus(c, settings, maveoEnv, deps.mutable);
-        pushStatusIfChanged(snap);
-        writeJson(res, 200, { ok: true, status: snap });
+        /**
+         * Use the service-level broadcaster so the MQTT forwarder also fires
+         * publishConnection / publishHealth — pushStatusIfChanged alone only
+         * wakes the WebUI long-poll. Falling back to a local push keeps unit
+         * tests that don't wire `broadcast` working.
+         */
+        if (deps.broadcast) {
+          deps.broadcast();
+        } else {
+          pushStatusIfChanged(buildStatus(c, settings, maveoEnv, deps.mutable));
+        }
+        writeJson(res, 200, { ok: true, status: buildStatus(c, settings, maveoEnv, deps.mutable) });
         return;
       }
 

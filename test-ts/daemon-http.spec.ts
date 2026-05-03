@@ -295,6 +295,58 @@ describe("daemonHttp", () => {
     });
   });
 
+  it("POST /api/reconnect calls deps.broadcast so MQTT topics stay in sync after manual reclaim", async () => {
+    /**
+     * Regression: the manual reclaim path used to call only pushStatusIfChanged,
+     * leaving `<prefix>/mqtt_connected` and `<prefix>/health` stuck on the
+     * pre-disconnect value. Confirm that we now route through deps.broadcast.
+     */
+    const stub = createFakeStick({
+      getMqttTransportState() {
+        return "connected";
+      },
+      isMqttConnected() {
+        return true;
+      },
+    });
+    const settings = minimalSettings();
+    const log = createLogger("error", "/tmp/test-maveo-daemon-reconnect.log");
+    const mutable: DaemonMutableState = {
+      connectedAtMs: null,
+      lastStick: undefined,
+      lastStickAt: null,
+      lastDoor: undefined,
+      lastLight: undefined,
+      lastError: "stale",
+      lastSessionLoss: { intentionalDisconnect: false, suspectedRemoteSessionTakeover: true },
+    };
+    let broadcasts = 0;
+    const h = createDaemonRequestHandler({
+      getApiToken: () => "secret",
+      getClient: () => stub,
+      getSettings: () => settings,
+      getRuntimeEnv: () => process.env as NodeJS.ProcessEnv,
+      getMaveoEnv: () => ({ ...process.env }),
+      mutable,
+      bindStickState: () => {},
+      log,
+      broadcast: () => {
+        broadcasts += 1;
+      },
+    });
+
+    await withServer(h, async (base) => {
+      const r = await fetch(new URL("api/reconnect", base), {
+        method: "POST",
+        headers: { "x-maveo-token": "secret" },
+      });
+      expect(r.status).to.equal(200);
+      expect(broadcasts, "broadcast invoked exactly once after manual reclaim").to.equal(1);
+      expect(mutable.lastError, "lastError cleared").to.equal(null);
+      expect(mutable.lastSessionLoss, "session loss cleared").to.equal(null);
+    });
+  });
+
   it("POST /api/log/level switches runtime level and rejects bogus values", async () => {
     const stub = createFakeStick();
     const settings = minimalSettings();
