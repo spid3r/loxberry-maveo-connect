@@ -57,6 +57,8 @@ Das Plugin bringt eine kleine, **opt-in** HTTP-API mit, die du aus Loxone direkt
 2. Im Block **„MQTT & Loxone-Anbindung“** den Schalter **„Loxone-Steuer-API aktivieren“** einschalten und **Speichern**.
 3. Solange der Schalter aus ist, antworten die Endpunkte mit HTTP `503 disabled` — nichts kann versehentlich das Tor öffnen.
 
+> **Beispiel-Verdrahtung** (Virtueller Ausgang, Virtueller Eingang über MQTT, Projektübersicht): die Screenshots aus **Loxone Config** liegen unter `docs/wiki-assets/loxone/` und werden in der generierten Wiki-Seite (`docs/WIKI_DOKUWIKI_START.txt`) im Abschnitt *Loxone-Anbindung (Beispiel)* automatisch eingebettet. Wenn du eigene Screenshots beisteuern willst, einfach weitere `*.png` / `*.jpg` in den Ordner legen — sie werden beim nächsten `npm run wiki:build` mit aufgenommen.
+
 ### 6.2 URLs für Virtuelle Ausgänge
 
 Ersetze `LB-IP` durch die LAN-Adresse deines LoxBerry und `loxberry:loxberry` durch deine LoxBerry-Plugin-Anmeldedaten:

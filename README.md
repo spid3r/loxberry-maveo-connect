@@ -265,6 +265,8 @@ For a Loxone status block: `open = 3 or 5`, `closed = 4`, `moving = 1 or 2`. `li
 
 The plugin exposes a small, **opt-in HTTP API** under the standard LoxBerry plugin path. The Miniserver hits these URLs from a Virtual Output — there is **no extra port** to open, the Node daemon stays bound to `127.0.0.1` and the internal token never leaves the LoxBerry.
 
+> Sample wiring screenshots from **Loxone Config** (Virtual Output for HTTP commands, Virtual Input for the MQTT status, project overview) live in `docs/wiki-assets/loxone/` and are auto-embedded in the [generated DokuWiki page](docs/WIKI_DOKUWIKI_START.txt) under *Loxone-Anbindung (Beispiel)*. Drop additional `*.png` / `*.jpg` files into that folder and they will be picked up on the next `npm run wiki:build`.
+
 1. In **Settings → MQTT & Loxone integration** turn on **Loxone control API** and save (off by default).
 2. In **Loxone Config**, add a **Virtual Output** for each command. Authentication uses the **standard LoxBerry plugin Basic Auth** sent inline in the URL.
 3. Endpoints (replace `LB-IP` with your LoxBerry's IP / hostname; `loxberry:loxberry` with your LoxBerry plugin credentials):

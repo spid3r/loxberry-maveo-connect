@@ -77,6 +77,18 @@ Voraussetzung: **LoxBerry ab Version 3.x**. ZIP unter **System → Plugins** ins
 
   * EN‑Varianten der gleichen Seiten liegen als ''maveoconnect-*-en.png'' unter ''docs/wiki-assets/'' im Repository (für zweisprachige Wikis).
 
+===== Loxone-Anbindung (Beispiel) =====
+
+  * Beispielhafte Verdrahtung in **Loxone Config** — virtueller Ausgang (HTTP‑Befehl an LoxBerry) und virtueller Eingang / MQTT‑Status:
+
+{{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/loxone/loxone-config-overview.png?820|Loxone Config — Übersicht der Bausteine}}
+
+{{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/loxone/loxone-virtual-input.png?820|Virtueller Eingang (MQTT‑Status vom Plugin)}}
+
+{{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/loxone/loxone-virtual-output.png?820|Virtueller Ausgang (HTTP‑Befehl an LoxBerry/Plugin)}}
+
+  * Detaillierte Endpunkte, Tor‑Status‑Codes und Beispiel‑URLs siehe README und Tab **Einstellungen** im Plugin.
+
 ===== MQTT-Weiterleitung =====
 
 Nach Aktivierung in den Einstellungen publiziert der Daemon **nicht‑retained** Nachrichten unter dem **Topic‑Präfix** mit den Endungen ''door_position'', ''door_label'' und ''light_on'' (Klartext bzw. Zahlencode — **kein** kombiniertes JSON‑Sammeltopic, damit das LoxBerry‑MQTT‑Gateway keine doppelten flachen Namen mit ''#''‑Escapes erzeugt). Details und Loxone‑Hinweise: README im Repository und Tab **Einstellungen** im Plugin.

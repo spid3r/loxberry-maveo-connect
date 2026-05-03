@@ -43,6 +43,10 @@ Voraussetzung: **LoxBerry ab Version 3.x**. ZIP unter **System → Plugins** ins
 
 {{SCREENSHOT_GALLERY}}
 
+===== Loxone-Anbindung (Beispiel) =====
+
+{{LOXONE_GALLERY}}
+
 ===== MQTT-Weiterleitung =====
 
 Nach Aktivierung in den Einstellungen publiziert der Daemon **nicht‑retained** Nachrichten unter dem **Topic‑Präfix** mit den Endungen ''door_position'', ''door_label'' und ''light_on'' (Klartext bzw. Zahlencode — **kein** kombiniertes JSON‑Sammeltopic, damit das LoxBerry‑MQTT‑Gateway keine doppelten flachen Namen mit ''#''‑Escapes erzeugt). Details und Loxone‑Hinweise: README im Repository und Tab **Einstellungen** im Plugin.

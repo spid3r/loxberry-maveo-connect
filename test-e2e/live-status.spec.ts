@@ -148,6 +148,14 @@ test.describe("@e2e maveoconnect live status & control (read-only)", () => {
     await page.setViewportSize({ width: 1366, height: 920 });
 
     /**
+     * NOTE: This test only writes the explicit `maveoconnect-*-{de,en}.png` files
+     * directly into `docs/wiki-assets/`. Manually curated assets (e.g. Loxone
+     * Config screenshots) live in `docs/wiki-assets/loxone/` and must never be
+     * touched by automation — the wiki generator picks them up dynamically.
+     * If you ever add cleanup logic here, scope it to this test's known filenames.
+     */
+
+    /**
      * Always force the language via `?lang=`; the i18n helper sets a cookie which can
      * leak between tests/sessions. Forcing the URL param ensures DE assets render in DE
      * and EN assets render in EN, regardless of any sticky cookie.

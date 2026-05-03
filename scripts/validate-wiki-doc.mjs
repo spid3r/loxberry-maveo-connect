@@ -13,6 +13,7 @@ export const REQUIRED_HEADINGS = [
   "===== Installation =====",
   "===== Konfiguration (Auszug) =====",
   "===== Screenshots =====",
+  "===== Loxone-Anbindung (Beispiel) =====",
   "===== MQTT-Weiterleitung =====",
   "===== HTTP-Daemon (intern) =====",
   "===== Support / Fehler melden =====",

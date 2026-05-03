@@ -1,6 +1,6 @@
 import { expect } from "chai";
 // @ts-expect-error - .mjs script without .d.ts; we only need its public functions for tests.
-import { parseVersionsFromChangelog, generateWikiDoc } from "../scripts/generate-wiki-doc.mjs";
+import { parseVersionsFromChangelog, generateWikiDoc, loxoneGallerySnippet, humanizeLoxoneCaption } from "../scripts/generate-wiki-doc.mjs";
 
 type ParsedVersion = { version: string; bullets: string[] };
 
@@ -84,5 +84,44 @@ describe("wiki-doc CHANGELOG parser", () => {
     expect(out).to.contain("**Version 1.1.0**");
     expect(out).to.contain("feat: ship");
     expect(out).to.match(/^X /);
+  });
+});
+
+describe("wiki-doc Loxone gallery", () => {
+  it("returns a friendly caption for known and unknown filenames", () => {
+    expect(humanizeLoxoneCaption("loxone-config-overview")).to.equal(
+      "Loxone Config — Übersicht der Bausteine",
+    );
+    expect(humanizeLoxoneCaption("loxone-virtual-output")).to.equal(
+      "Virtueller Ausgang (HTTP‑Befehl an LoxBerry/Plugin)",
+    );
+    expect(humanizeLoxoneCaption("loxone-extra-monitoring")).to.equal("Loxone Extra Monitoring");
+  });
+
+  it("auto-discovers PNG/JPG files under docs/wiki-assets/loxone/ when present", () => {
+    const out: string = loxoneGallerySnippet();
+    /**
+     * The repo currently ships three Loxone screenshots — assert all three
+     * basenames appear, ordered alphabetically (config / virtual-input / virtual-output).
+     * If we ever drop new manual assets in, this test still passes; it only
+     * encodes the contract that *known* basenames render as DokuWiki image embeds
+     * pointing at the loxone/ subfolder.
+     */
+    const idxConfig = out.indexOf("loxone/loxone-config-overview.png");
+    const idxInput = out.indexOf("loxone/loxone-virtual-input.png");
+    const idxOutput = out.indexOf("loxone/loxone-virtual-output.png");
+    expect(idxConfig).to.be.greaterThan(-1);
+    expect(idxInput).to.be.greaterThan(idxConfig);
+    expect(idxOutput).to.be.greaterThan(idxInput);
+    expect(out).to.match(/\{\{[^}]+\?820\|[^}]+\}\}/);
+  });
+
+  it("renders one DokuWiki image embed per discovered file with a blank line between them", () => {
+    const out: string = loxoneGallerySnippet();
+    const embeds = out.match(/\{\{https:[^}]+\}\}/g) ?? [];
+    /** With three real screenshots in the repo, we expect three embeds and at least two blank-line separators. */
+    expect(embeds.length).to.be.at.least(3);
+    const blankSeparated = out.match(/\}\}\n\n\{\{/g) ?? [];
+    expect(blankSeparated.length).to.be.at.least(embeds.length - 1);
   });
 });

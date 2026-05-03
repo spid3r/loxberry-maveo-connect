@@ -93,10 +93,75 @@ export function screenshotGallerySnippet() {
   ].join("\n");
 }
 
+/**
+ * Map known Loxone asset filenames (basename without extension) to a friendly
+ * caption. Anything not in this map falls back to a humanized version of the
+ * filename so newly dropped PNGs are still picked up automatically.
+ */
+const LOXONE_CAPTIONS = {
+  "loxone-config-overview": "Loxone Config — Übersicht der Bausteine",
+  "loxone-virtual-input": "Virtueller Eingang (MQTT‑Status vom Plugin)",
+  "loxone-virtual-output": "Virtueller Ausgang (HTTP‑Befehl an LoxBerry/Plugin)",
+};
+
+export function humanizeLoxoneCaption(basename) {
+  if (LOXONE_CAPTIONS[basename]) return LOXONE_CAPTIONS[basename];
+  return basename
+    .replace(/[-_]+/g, " ")
+    .replace(/\bloxone\b/gi, "Loxone")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
+/**
+ * Loxone gallery — auto-discovers manually curated screenshots under
+ * docs/wiki-assets/loxone/. The auto Playwright screenshot test never writes
+ * into this subfolder, so the contents are safe across `npm run wiki:screenshots`.
+ */
+export function loxoneGallerySnippet() {
+  const dir = path.join(root, "docs", "wiki-assets", "loxone");
+  let files = [];
+  try {
+    if (fs.existsSync(dir)) {
+      files = fs
+        .readdirSync(dir)
+        .filter((n) => /\.(png|jpg|jpeg)$/i.test(n))
+        .sort((a, b) => a.localeCompare(b));
+    }
+  } catch {
+    /* ignore */
+  }
+
+  if (files.length === 0) {
+    return [
+      "  * (Noch keine Loxone‑Screenshots eingecheckt. Lege Bilder unter ''docs/wiki-assets/loxone/'' ab — sie werden beim nächsten ''wiki:build'' automatisch eingebettet.)",
+    ].join("\n");
+  }
+
+  const lines = [
+    "  * Beispielhafte Verdrahtung in **Loxone Config** — virtueller Ausgang (HTTP‑Befehl an LoxBerry) und virtueller Eingang / MQTT‑Status:",
+    "",
+  ];
+  for (const file of files) {
+    const basename = file.replace(/\.[^.]+$/, "");
+    const caption = humanizeLoxoneCaption(basename);
+    lines.push(`{{${SCREENSHOT_BASE}/loxone/${file}?820|${caption}}}`);
+    lines.push("");
+  }
+  lines.push(
+    "  * Detaillierte Endpunkte, Tor‑Status‑Codes und Beispiel‑URLs siehe README und Tab **Einstellungen** im Plugin.",
+  );
+  return lines.join("\n");
+}
+
 export function generateWikiDoc({ templateText, changelogText }) {
   const versions = renderVersionHistory(changelogText);
   const screenshots = screenshotGallerySnippet();
-  return templateText.replaceAll("{{VERSION_HISTORY}}", versions).replaceAll("{{SCREENSHOT_GALLERY}}", screenshots);
+  const loxone = loxoneGallerySnippet();
+  return templateText
+    .replaceAll("{{VERSION_HISTORY}}", versions)
+    .replaceAll("{{SCREENSHOT_GALLERY}}", screenshots)
+    .replaceAll("{{LOXONE_GALLERY}}", loxone);
 }
 
 export function run() {
