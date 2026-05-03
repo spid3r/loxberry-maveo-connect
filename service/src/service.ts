@@ -116,7 +116,28 @@ async function hydrateStickSnapshotAfterMqttRecovery(context: string): Promise<v
   }
   mutable.lastSessionLoss = null;
   mutable.lastError = null;
-  pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+  broadcastStatus();
+}
+
+/**
+ * Build the current status snapshot, push it to long-poll listeners (the WebUI
+ * Status page) AND fan it out to the four retained Loxone-friendly MQTT topics
+ * (`mqtt_connected`, `session_takeover`, `transport`, `backoff_until_ms`).
+ *
+ * Called from every state-change site so the WebUI and Loxone always stay in
+ * sync — Loxone can drive a `Logikbaustein → reclaim.php` rule purely off the
+ * `session_takeover` topic without ever touching the daemon HTTP API directly.
+ */
+function broadcastStatus(): void {
+  const snap = buildStatus(client, settings, maveoEnv, mutable);
+  pushStatusIfChanged(snap);
+  const sessionLoss = snap.sessionLoss as { suspectedRemoteSessionTakeover?: boolean } | null | undefined;
+  forwarder.publishConnection({
+    mqttConnected: snap.mqttConnected === true,
+    sessionTakeover: sessionLoss?.suspectedRemoteSessionTakeover === true,
+    transport: typeof snap.transport === "string" ? snap.transport : "unknown",
+    backoffUntilMs: typeof snap.backoffUntilMs === "number" ? snap.backoffUntilMs : 0,
+  });
 }
 
 function bindStickState() {
@@ -171,13 +192,13 @@ function wireClient() {
           backoffAfterBurstMs: info.backoffAfterBurstMs,
           hint: "Until backoffUntil, automatic reclaim is paused; use Status → MQTT buttons or wait.",
         });
-        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+        broadcastStatus();
       },
       onSessionContentionSkipped: (info) => {
         log.debug("MQTT auto-reclaim skipped (contention backoff active)", {
           backoffUntilMs: info.backoffUntilMs,
         });
-        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+        broadcastStatus();
       },
     }),
   );
@@ -188,7 +209,7 @@ function wireClient() {
       intentionalDisconnect: ev.intentionalDisconnect,
       suspectedRemoteSessionTakeover: ev.suspectedRemoteSessionTakeover,
     });
-    pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+    broadcastStatus();
   });
 }
 
@@ -206,7 +227,7 @@ function bindLifecycleAfterConnect(): void {
       if (e.kind === "manual_recover_finished" && !e.ok) {
         mutable.lastError = e.error instanceof Error ? e.error.message : String(e.error);
         log.error("Manual recover failed", { error: mutable.lastError });
-        pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+        broadcastStatus();
       }
       if (e.kind === "manual_recover_finished" && e.ok) {
         /** Full snapshot + sessionLoss clear happens in `/api/reconnect` after await; avoid double MQTT reads here. */
@@ -226,14 +247,14 @@ async function connectMaveo(): Promise<void> {
   if (!client) {
     mutable.lastError = "Settings unvollständig — bitte E-Mail, Passwort, Cognito-Pool und Stick-Serial in den Einstellungen speichern.";
     log.warn(mutable.lastError);
-    pushStatusIfChanged(buildStatus(undefined, settings, maveoEnv, mutable));
+    broadcastStatus();
     return;
   }
   const m = settings.maveo;
   if (!m.email || !m.password || !m.cognitoIdentityPoolId || !m.thingName) {
     mutable.lastError = "Incomplete settings: email, password, Cognito pool, and stick serial are required.";
     log.error(mutable.lastError);
-    pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+    broadcastStatus();
     return;
   }
 
@@ -253,7 +274,7 @@ async function connectMaveo(): Promise<void> {
     log.error("Maveo connect failed", { error: mutable.lastError });
     mutable.connectedAtMs = null;
   }
-  pushStatusIfChanged(buildStatus(client, settings, maveoEnv, mutable));
+  broadcastStatus();
 }
 
 /**

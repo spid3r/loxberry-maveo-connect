@@ -8,12 +8,34 @@ import { maveoDoorPositionLabel } from "maveo-connect-stick-client";
 const FORWARD_RECONNECT_MS = 30_000;
 const FORWARD_ERROR_WARN_INTERVAL_MS = 60_000;
 
+/**
+ * Connection-state snapshot that drives the retained Loxone-friendly topics:
+ * `<prefix>/mqtt_connected`, `<prefix>/session_takeover`, `<prefix>/transport`,
+ * `<prefix>/backoff_until_ms`. Loxone HTTP-poll setups can also read all of
+ * this via `…/api/status.php`, but the MQTT path is push-based and cheaper.
+ */
+export type ConnectionSnapshot = {
+  mqttConnected: boolean;
+  /** True iff the last MQTT loss looks like the Maveo app stole the session. Cleared on recovery. */
+  sessionTakeover: boolean;
+  /** Library-reported transport state ("connected" | "connecting" | "disconnected" | "reconnecting" …). */
+  transport: string;
+  /** > 0 while the auto-reclaim burst-pause is active; 0 otherwise. */
+  backoffUntilMs: number;
+};
+
 export class MqttForwarder {
   private client: MqttClient | undefined;
   private prefix = "maveo";
   private log: Logger;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private pending: { door?: MaveoDoorPosition; light?: boolean } = {};
+  /**
+   * Last connection-state snapshot we published, so we can suppress duplicate
+   * publishes (a Loxone Statusbaustein is fine with retained-once values; we
+   * don't need to spam the broker). Updated by `publishConnection` itself.
+   */
+  private lastConn: ConnectionSnapshot | undefined;
   /** Throttle identical forward errors: one WARN per minute, counts between. */
   private forwardErrorThrottle:
     | { signature: string; windowStartMs: number; hitsInWindow: number; lastWarnMs: number }
@@ -108,6 +130,45 @@ export class MqttForwarder {
         /* ignore */
       }
       this.client = undefined;
+    }
+    this.lastConn = undefined;
+  }
+
+  /**
+   * Publish the current connection snapshot to four retained topics under
+   * `<prefix>/`. Retained = true so a Loxone Statusbaustein sees the last
+   * known value immediately on broker reconnect (otherwise we'd only ever
+   * fire on transitions and the block could sit empty for hours).
+   *
+   * Suppresses no-op publishes when nothing changed, and silently no-ops when
+   * the forwarder is disabled / not connected to the LoxBerry broker —
+   * upstream just calls this on every relevant event.
+   */
+  publishConnection(snapshot: ConnectionSnapshot): void {
+    const c = this.client;
+    if (!c?.connected) {
+      this.lastConn = undefined;
+      return;
+    }
+    const prev = this.lastConn;
+    if (
+      prev &&
+      prev.mqttConnected === snapshot.mqttConnected &&
+      prev.sessionTakeover === snapshot.sessionTakeover &&
+      prev.transport === snapshot.transport &&
+      prev.backoffUntilMs === snapshot.backoffUntilMs
+    ) {
+      return;
+    }
+    const p = this.prefix;
+    try {
+      c.publish(`${p}/mqtt_connected`, snapshot.mqttConnected ? "1" : "0", { qos: 0, retain: true });
+      c.publish(`${p}/session_takeover`, snapshot.sessionTakeover ? "1" : "0", { qos: 0, retain: true });
+      c.publish(`${p}/transport`, snapshot.transport, { qos: 0, retain: true });
+      c.publish(`${p}/backoff_until_ms`, String(snapshot.backoffUntilMs), { qos: 0, retain: true });
+      this.lastConn = { ...snapshot };
+    } catch (e) {
+      this.log.warn("MQTT forward: connection publish failed", { error: String(e) });
     }
   }
 

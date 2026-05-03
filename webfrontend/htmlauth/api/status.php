@@ -14,13 +14,22 @@
  *     "doorLabel":    string | null,       // english token (e.g. "open")
  *     "lightOn":      true | false | null,
  *     "mqttConnected": bool,
+ *     "sessionTakeover": bool,            // true while the Maveo app appears
+ *                                          // to have stolen the session — drive
+ *                                          // a Logikbaustein → reclaim.php off this
+ *     "transport": string,                 // "connected"|"connecting"|
+ *                                          // "disconnected"|"reconnecting" …
+ *     "backoffUntilMs": number,            // > 0 ⇒ auto-reclaim is paused
+ *                                          // (manual reclaim still works)
  *     "stickSerial":   string | null,
  *     "lastError":     string | null
  *   }
  *
  * The MQTT forward path remains the recommended way to bring values into Loxone
- * (push-based, near-instant). This endpoint is provided as a fallback for setups
- * without a broker, or to drive a poll-based status block.
+ * (push-based, near-instant; same data lives under `<prefix>/mqtt_connected`,
+ * `<prefix>/session_takeover`, `<prefix>/transport`, `<prefix>/backoff_until_ms`).
+ * This endpoint is provided as a fallback for setups without a broker, or to
+ * drive a poll-based status block.
  */
 
 require_once __DIR__ . '/_loxone_common.php';
@@ -39,11 +48,17 @@ if (empty($r['ok'])) {
     ]);
 }
 
+$sessionLoss = isset($r['sessionLoss']) && is_array($r['sessionLoss']) ? $r['sessionLoss'] : null;
+$sessionTakeover = is_array($sessionLoss) && !empty($sessionLoss['suspectedRemoteSessionTakeover']);
+
 $out = [
     'doorPosition' => array_key_exists('doorPosition', $r) ? $r['doorPosition'] : null,
     'doorLabel' => array_key_exists('doorLabel', $r) ? $r['doorLabel'] : null,
     'lightOn' => array_key_exists('lightOn', $r) ? $r['lightOn'] : null,
     'mqttConnected' => !empty($r['mqttConnected']),
+    'sessionTakeover' => $sessionTakeover,
+    'transport' => isset($r['transport']) && is_string($r['transport']) ? $r['transport'] : 'unknown',
+    'backoffUntilMs' => isset($r['backoffUntilMs']) && is_numeric($r['backoffUntilMs']) ? (int) $r['backoffUntilMs'] : 0,
     'stickSerial' => array_key_exists('stickSerial', $r) ? $r['stickSerial'] : null,
     'lastError' => array_key_exists('lastError', $r) ? $r['lastError'] : null,
 ];
