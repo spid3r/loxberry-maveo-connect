@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.1.1...v1.2.0) (2026-05-03)
+
+
+### Features
+
+* **wiki:** add curated Loxone wiring gallery section ([d9ba882](https://github.com/spid3r/loxberry-maveo-connect/commit/d9ba8822d0fa388a3c99bcb8d9d78e6023e36357))
+
 ## [1.1.1](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.1.0...v1.1.1) (2026-05-03)
 
 

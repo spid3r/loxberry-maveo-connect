@@ -1,6 +1,10 @@
 ====== Maveo Connect / Marantec (Connect Stick over MQTT) ======
 
 ++++ Version History |
+**Version 1.2.0**
+
+  * **wiki:** add curated Loxone wiring gallery section (d9ba882)
+
 **Version 1.1.1**
 
   * **wiki:** include semantic-release level-1 headings and skip pre-releases (51f7fb6)
