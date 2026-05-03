@@ -1,3 +1,7 @@
+## [1.0.1-beta.4](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1-beta.3...v1.0.1-beta.4) (2026-05-03)
+
+* Beta integration build (see commits on branch `beta`).
+
 ## [1.0.1-beta.3](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1-beta.2...v1.0.1-beta.3) (2026-05-03)
 
 * feat(loxone): on-the-fly log diagnostics from the Loxone app
