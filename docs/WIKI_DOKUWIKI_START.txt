@@ -1,6 +1,16 @@
 ====== Maveo Connect / Marantec (Connect Stick over MQTT) ======
 
 ++++ Version History |
+**Version 1.1.0**
+
+  * **build:** strip VS Code auto-attach env from spawned subprocesses (e9f1530)
+  * **loxone:** re-publish mqtt_connected/health after manual /api/reconnect (068de68)
+  * **api:** add Loxone control HTTP API behind LoxBerry Basic Auth (778b06c)
+  * **log:** add size-based log rotation and clear-log control (75a8b6b)
+  * **loxone:** expose detached / takeover state via MQTT and status.php (69c350a)
+  * **loxone:** on-the-fly log diagnostics from the Loxone app (9008893)
+  * **loxone:** publish retained last_error and health diagnose topics (f423ab8), closes hi#frequency
+
 **Version 1.0.1**
 
   * **docs:** add disclaimer (12db4a2)

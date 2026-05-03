@@ -13,18 +13,22 @@ const OUTPUT_PATH = path.join(root, "docs", "WIKI_DOKUWIKI_START.txt");
 const SCREENSHOT_BASE =
   "https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets";
 
-export function parseVersionsFromChangelog(changelog, maxVersions = 8) {
+const VERSION_HEADING_RE = /^#{1,6}\s*\[(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\]/;
+const SUBSECTION_HEADING_RE = /^#{1,6}\s+\S/;
+
+export function parseVersionsFromChangelog(changelog, maxVersions = 8, { includePrerelease = false } = {}) {
   const lines = changelog.split(/\r?\n/);
   const sections = [];
   let current = null;
   for (const line of lines) {
-    const m = line.match(/^##\s*\[(\d+\.\d+\.\d+)\]/);
-    if (m) {
+    const v = line.match(VERSION_HEADING_RE);
+    if (v) {
       if (current) sections.push(current);
-      current = { version: m[1], bullets: [] };
+      current = { version: v[1], bullets: [] };
       continue;
     }
     if (!current) continue;
+    if (SUBSECTION_HEADING_RE.test(line)) continue;
     const b = line.match(/^\s*[-*]\s+(.+)/);
     if (b) {
       const text = b[1]
@@ -35,7 +39,8 @@ export function parseVersionsFromChangelog(changelog, maxVersions = 8) {
     }
   }
   if (current) sections.push(current);
-  return sections.slice(0, maxVersions);
+  const filtered = includePrerelease ? sections : sections.filter((s) => !s.version.includes("-"));
+  return filtered.slice(0, maxVersions);
 }
 
 export function renderVersionHistory(changelogText) {
