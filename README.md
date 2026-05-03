@@ -203,7 +203,49 @@ There are **no external CDN libraries** in the plugin web UI — only embedded C
 4. Subscribe to the topics above, for example:
    - **Virtual input (digital)** on `…/light_on` — map incoming text `1` / `0` (or use a small conversion if your Loxone build expects different comparators).
    - **Virtual input (analog)** or **status** on `…/door_position` — integer 0…6; optionally drive icons or logic from `…/door_label`.
-5. Open/close **commands** from Loxone to the garage are **not** exposed on this MQTT channel (only state **out**). Use Loxone controls that talk to your existing door actors, or operate the door from the plugin **Status** tab / Maveo app.
+5. Open/close **commands** from Loxone are sent **over HTTP**, not MQTT — see *Loxone control via Virtual Outputs* below. The MQTT channel intentionally stays status-only.
+
+#### Door position codes (`door_position` / `status.php`)
+
+| Code | Label | Meaning |
+|------|-------|---------|
+| 0 | `stopped` | Motor stopped between end positions |
+| 1 | `opening` | Door opening |
+| 2 | `closing` | Door closing |
+| 3 | `open` | Fully open |
+| 4 | `closed` | Fully closed |
+| 5 | `intermediateOpen` | Intermediate / ventilation position |
+| 6 | `intermediateClosed` | Intermediate position toward closed |
+
+For a Loxone status block: `open = 3 or 5`, `closed = 4`, `moving = 1 or 2`. `light_on` is `1`/`0`.
+
+### Loxone control via Virtual Outputs
+
+The plugin exposes a small, **opt-in HTTP API** under the standard LoxBerry plugin path. The Miniserver hits these URLs from a Virtual Output — there is **no extra port** to open, the Node daemon stays bound to `127.0.0.1` and the internal token never leaves the LoxBerry.
+
+1. In **Settings → MQTT & Loxone integration** turn on **Loxone control API** and save (off by default).
+2. In **Loxone Config**, add a **Virtual Output** for each command. Authentication uses the **standard LoxBerry plugin Basic Auth** sent inline in the URL.
+3. Endpoints (replace `LB-IP` with your LoxBerry's IP / hostname; `loxberry:loxberry` with your LoxBerry plugin credentials):
+
+```text
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=open
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=close
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=stop
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=ventilate
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=on
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=off
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=toggle
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/reclaim.php
+http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php
+```
+
+Successful actions return HTTP `200` with the body `OK`; failures return `4xx`/`5xx` with `ERR <message>`. While the toggle is off, every endpoint replies `503 disabled`. `status.php` returns a compact JSON snapshot — useful as a fallback for setups without an MQTT broker:
+
+```json
+{"doorPosition":3,"doorLabel":"open","lightOn":false,"mqttConnected":true,"stickSerial":"…","lastError":null}
+```
+
+Don't expose this URL space to the open internet — Basic Auth is fine inside a home network, which is the LoxBerry default.
 
 Door movement is reflected as soon as the Marantec cloud pushes stick state; the admin **Status** page **polls** the daemon about every **2 seconds** so the UI stays fresh without WebSockets. Long-poll (`/api/status/wait`) is still implemented server-side for optional use; the bundled UI prefers simple polling for fewer moving parts behind Apache.
 

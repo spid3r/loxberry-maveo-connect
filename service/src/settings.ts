@@ -47,6 +47,16 @@ export type PluginSettings = {
     password?: string;
     topicPrefix?: string;
   };
+  /**
+   * Opt-in toggle for the PHP-wrapped Loxone control endpoints under
+   * `webfrontend/htmlauth/api/*.php`. The Node daemon does NOT read this — the
+   * field is persisted purely so the PHP layer can enforce 503 when off, and so
+   * the WebUI can render the toggle. Default `false` keeps the surface minimal
+   * for users who just consume MQTT status.
+   */
+  loxoneApi?: {
+    enabled?: boolean;
+  };
 };
 
 /** Same broker URL as “LoxBerry broker” in the web UI (`127.0.0.1:1883` / `localhost:1883`). */
@@ -163,6 +173,9 @@ const defaultSettings = (): PluginSettings => ({
     password: "",
     topicPrefix: "maveo",
   },
+  loxoneApi: {
+    enabled: false,
+  },
 });
 
 export function loadSettingsFile(path: string): PluginSettings {
@@ -207,6 +220,7 @@ function deepMerge(a: PluginSettings, b: Partial<PluginSettings>): PluginSetting
     daemon: { ...a.daemon, ...(b.daemon ?? {}) },
     logging: { ...a.logging, ...(b.logging ?? {}) },
     mqttForward: { ...a.mqttForward, ...(b.mqttForward ?? {}) },
+    loxoneApi: { ...a.loxoneApi, ...(b.loxoneApi ?? {}) },
   };
 }
 

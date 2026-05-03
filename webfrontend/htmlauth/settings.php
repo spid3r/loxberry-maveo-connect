@@ -99,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
         $logging = $existing['logging'] ?? [];
         $mf = $existing['mqttForward'] ?? [];
         $general = $existing['general'] ?? [];
+        $loxApi = $existing['loxoneApi'] ?? [];
 
         $m['email'] = trim((string) ($_POST['maveo_email'] ?? ''));
         $pw = trim((string) ($_POST['maveo_password'] ?? ''));
@@ -141,6 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
         }
         $mf['topicPrefix'] = trim((string) ($_POST['mqtt_forward_topic_prefix'] ?? 'maveo'));
 
+        $loxApi['enabled'] = isset($_POST['loxone_api_enabled']);
+
         $langCandidate = strtolower(trim((string) ($_POST['general_language'] ?? '')));
         if (in_array($langCandidate, ['de', 'en'], true)) {
             $general['language'] = $langCandidate;
@@ -153,6 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
             'daemon' => $daemon,
             'logging' => $logging,
             'mqttForward' => $mf,
+            'loxoneApi' => $loxApi,
         ];
 
         $json = json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -186,6 +190,7 @@ $daemon = $s['daemon'] ?? [];
 $logging = $s['logging'] ?? [];
 $mf = $s['mqttForward'] ?? [];
 $general = $s['general'] ?? [];
+$loxApi = $s['loxoneApi'] ?? [];
 
 $poolDisplay = trim((string) ($m['cognitoIdentityPoolId'] ?? ''));
 $poolPlaceholder = sprintf('%s (%s)', mc_t('SETTINGS', 'HINT_POOL_ID'), MAVOECONNECT_LIB_DEFAULT_POOL);
@@ -322,6 +327,15 @@ mc_te('SETTINGS', 'HINT_THING_NAME');
 echo '</span></div>';
 echo '</div>';
 
+/**
+ * "MQTT & Loxone integration" panel — promoted out of the expert area in v1.x
+ * because the very first thing most users want from a LoxBerry plugin is
+ * Loxone wiring. Three building blocks:
+ *   1) MQTT forward (status OUT to a broker — push-style values for Loxone).
+ *   2) Loxone control API (HTTP IN from Loxone Virtual Outputs — opt-in).
+ *   3) URL examples + door-position code table (0..6) so a user can build the
+ *      Virtual Output / status block without bouncing back to the README.
+ */
 echo '<div class="mc-panel" style="margin-top:14px;margin-bottom:6px;">';
 echo '<h2 class="mc-step-hint" style="margin-top:0;">';
 mc_te('SETTINGS', 'LOXONE_HELP_TITLE');
@@ -329,11 +343,66 @@ echo '</h2>';
 echo '<p class="mc-muted" style="margin:0 0 10px;line-height:1.45;">';
 mc_te('SETTINGS', 'LOXONE_HELP_INTRO');
 echo '</p>';
-echo '<ul class="mc-muted" style="margin:0 0 12px;padding-left:1.25rem;line-height:1.45;">';
-echo '<li style="margin-bottom:6px;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXONE_HELP_B1', 'Status & control: door and light from the daemon, refreshed at short intervals.'), ENT_QUOTES, 'UTF-8') . '</li>';
-echo '<li style="margin-bottom:6px;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXONE_HELP_B2', 'MQTT forwarding: publish to broker; in Loxone Config subscribe to prefix topics.'), ENT_QUOTES, 'UTF-8') . '</li>';
-echo '<li>' . htmlspecialchars(mc_t('SETTINGS', 'LOXONE_HELP_B3', 'Door commands from Loxone are not accepted via this plugin’s MQTT — use status page, Maveo app, or Loxone actors.'), ENT_QUOTES, 'UTF-8') . '</li>';
+
+// --- MQTT forward (status out) ---
+echo '<p class="mc-section-title" style="margin-top:6px;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXMQTT_TITLE', 'MQTT forward (status to Loxone)'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<div class="mc-tile"><div class="mc-tile-head"><label class="mc-switch"><input type="checkbox" id="mqtt_forward_enabled" name="mqtt_forward_enabled" value="1"' . (!empty($mf['enabled']) ? ' checked' : '') . ' /><span>' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_MQTT_FORWARD'), ENT_QUOTES, 'UTF-8') . '</span></label></div>';
+echo '<p class="mc-tile-desc">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_MQTT_FORWARD'), ENT_QUOTES, 'UTF-8') . '</p></div>';
+echo '<div class="mc-tile">';
+echo '<div class="mc-tile-head"><label class="mc-switch"><input type="checkbox" id="mqtt_use_lb_broker" name="mqtt_use_lb_broker" value="1"' . ($mqttUseLb ? ' checked' : '') . ' /><span>' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_USE_LB_BROKER'), ENT_QUOTES, 'UTF-8') . '</span></label></div>';
+echo '<p class="mc-tile-desc">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_USE_LB_BROKER'), ENT_QUOTES, 'UTF-8') . '</p></div>';
+echo '<div id="mc-mqtt-custom" class="mc-inline-2 mc-form-stack" style="margin-top:12px;' . ($mqttUseLb ? 'display:none;' : '') . '">';
+echo '<div class="mc-field"><label for="mqtt_forward_host">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_HOST'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_host" name="mqtt_forward_host" value="' . htmlspecialchars($mqttHost) . '" autocomplete="off" /></div>';
+echo '<div class="mc-field"><label for="mqtt_forward_port">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_PORT'), ENT_QUOTES, 'UTF-8') . '</label><input type="number" id="mqtt_forward_port" name="mqtt_forward_port" min="1" max="65535" value="' . (int) $mqttPort . '" /></div>';
+echo '</div>';
+echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_username">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_USER'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_username" name="mqtt_forward_username" value="' . htmlspecialchars($mf['username'] ?? '') . '" autocomplete="off" /></div>';
+echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_password">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_PASS'), ENT_QUOTES, 'UTF-8') . '</label><input type="password" id="mqtt_forward_password" name="mqtt_forward_password" value="" autocomplete="new-password" /><span class="mc-hint">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_BROKER_PASS'), ENT_QUOTES, 'UTF-8') . '</span></div>';
+echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_topic_prefix">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_TOPIC_PREFIX'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_topic_prefix" name="mqtt_forward_topic_prefix" value="' . htmlspecialchars($mf['topicPrefix'] ?? 'maveo') . '" autocomplete="off" /><span class="mc-hint">';
+mc_th('SETTINGS', 'HINT_TOPIC_PREFIX');
+echo '</span></div>';
+
+// --- Loxone control API (commands in) ---
+echo '<p class="mc-section-title" style="margin-top:18px;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_TITLE', 'Loxone control API (commands from Loxone)'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<div class="mc-tile"><div class="mc-tile-head"><label class="mc-switch"><input type="checkbox" id="loxone_api_enabled" name="loxone_api_enabled" value="1"' . (!empty($loxApi['enabled']) ? ' checked' : '') . ' /><span>' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_TOGGLE_LABEL', 'Enable Loxone control API'), ENT_QUOTES, 'UTF-8') . '</span></label></div>';
+echo '<p class="mc-tile-desc">' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_HINT', 'Adds simple GET endpoints under /admin/plugins/maveoconnect/api/ that Loxone Virtual Outputs can call. Disabled by default; the daemon stays on 127.0.0.1 either way.'), ENT_QUOTES, 'UTF-8') . '</p></div>';
+
+echo '<p class="mc-muted" style="margin:8px 0 6px;line-height:1.45;font-size:.88rem;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_AUTH_NOTE', 'Authentication uses the standard LoxBerry plugin Basic Auth. Send the credentials inline in the URL configured in your Loxone Virtual Output, e.g. http://loxberry:loxberry@<LoxBerry-IP>/...'), ENT_QUOTES, 'UTF-8') . '</p>';
+
+echo '<p class="mc-muted" style="margin:8px 0 4px;line-height:1.45;font-size:.88rem;font-weight:600;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URLS_TITLE', 'Example URLs (replace LB-IP with your LoxBerry):'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<ul class="mc-muted" style="margin:0 0 10px;padding-left:1.25rem;line-height:1.55;font-size:.85rem;">';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=open</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_DOOR', 'open / close / stop / ventilate'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=on</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_LIGHT', 'on / off / toggle'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/reclaim.php</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_RECLAIM', 'reclaim MQTT session from the Maveo app'), ENT_QUOTES, 'UTF-8') . '</li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php</code> &mdash; ' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_URL_STATUS', 'compact JSON status (door / light / mqttConnected)'), ENT_QUOTES, 'UTF-8') . '</li>';
 echo '</ul>';
+
+// --- Door position codes (0..6) — useful for Loxone status block design ---
+echo '<p class="mc-section-title" style="margin-top:14px;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_TITLE', 'Door position codes (door_position / status.php)'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<table class="mc-muted" style="border-collapse:collapse;font-size:.85rem;line-height:1.4;margin:0 0 8px;">';
+echo '<thead><tr>'
+    . '<th style="text-align:left;padding:4px 12px 4px 0;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_COL_CODE', 'Code'), ENT_QUOTES, 'UTF-8') . '</th>'
+    . '<th style="text-align:left;padding:4px 12px 4px 0;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_COL_LABEL', 'Label'), ENT_QUOTES, 'UTF-8') . '</th>'
+    . '<th style="text-align:left;padding:4px 0;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_COL_MEANING', 'Meaning'), ENT_QUOTES, 'UTF-8') . '</th>'
+    . '</tr></thead><tbody>';
+$doorRows = [
+    ['0', 'stopped',           mc_t('SETTINGS', 'DOOR_CODE_0', 'Motor stopped between end positions')],
+    ['1', 'opening',            mc_t('SETTINGS', 'DOOR_CODE_1', 'Door opening')],
+    ['2', 'closing',            mc_t('SETTINGS', 'DOOR_CODE_2', 'Door closing')],
+    ['3', 'open',               mc_t('SETTINGS', 'DOOR_CODE_3', 'Fully open')],
+    ['4', 'closed',             mc_t('SETTINGS', 'DOOR_CODE_4', 'Fully closed')],
+    ['5', 'intermediateOpen',   mc_t('SETTINGS', 'DOOR_CODE_5', 'Intermediate / ventilation position')],
+    ['6', 'intermediateClosed', mc_t('SETTINGS', 'DOOR_CODE_6', 'Intermediate position toward closed')],
+];
+foreach ($doorRows as $row) {
+    echo '<tr>'
+        . '<td style="padding:3px 12px 3px 0;font-variant-numeric:tabular-nums;">' . htmlspecialchars($row[0]) . '</td>'
+        . '<td style="padding:3px 12px 3px 0;"><code>' . htmlspecialchars($row[1]) . '</code></td>'
+        . '<td style="padding:3px 0;">' . htmlspecialchars($row[2]) . '</td>'
+        . '</tr>';
+}
+echo '</tbody></table>';
+echo '<p class="mc-muted" style="margin:0 0 12px;line-height:1.45;font-size:.82rem;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_LOXONE_HINT', 'In a Loxone status block: open = 3 or 5, closed = 4, moving = 1 or 2. light_on is 1/0.'), ENT_QUOTES, 'UTF-8') . '</p>';
+
 echo '<p class="mc-muted" style="margin:0 0 10px;line-height:1.45;font-size:.88rem;">';
 mc_te('SETTINGS', 'LOXONE_HELP_LATENCY');
 echo '</p>';
@@ -365,23 +434,8 @@ foreach ($langs as $code) {
 }
 echo '</select></div></div>';
 
-echo '<p class="mc-section-title">';
-mc_te('SETTINGS', 'EXPERT_MQTT_TITLE');
-echo '</p>';
-echo '<div class="mc-tile"><div class="mc-tile-head"><label class="mc-switch"><input type="checkbox" id="mqtt_forward_enabled" name="mqtt_forward_enabled" value="1"' . (!empty($mf['enabled']) ? ' checked' : '') . ' /><span>' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_MQTT_FORWARD'), ENT_QUOTES, 'UTF-8') . '</span></label></div>';
-echo '<p class="mc-tile-desc">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_MQTT_FORWARD'), ENT_QUOTES, 'UTF-8') . '</p></div>';
-echo '<div class="mc-tile">';
-echo '<div class="mc-tile-head"><label class="mc-switch"><input type="checkbox" id="mqtt_use_lb_broker" name="mqtt_use_lb_broker" value="1"' . ($mqttUseLb ? ' checked' : '') . ' /><span>' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_USE_LB_BROKER'), ENT_QUOTES, 'UTF-8') . '</span></label></div>';
-echo '<p class="mc-tile-desc">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_USE_LB_BROKER'), ENT_QUOTES, 'UTF-8') . '</p></div>';
-echo '<div id="mc-mqtt-custom" class="mc-inline-2 mc-form-stack" style="margin-top:12px;' . ($mqttUseLb ? 'display:none;' : '') . '">';
-echo '<div class="mc-field"><label for="mqtt_forward_host">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_HOST'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_host" name="mqtt_forward_host" value="' . htmlspecialchars($mqttHost) . '" autocomplete="off" /></div>';
-echo '<div class="mc-field"><label for="mqtt_forward_port">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_PORT'), ENT_QUOTES, 'UTF-8') . '</label><input type="number" id="mqtt_forward_port" name="mqtt_forward_port" min="1" max="65535" value="' . (int) $mqttPort . '" /></div>';
-echo '</div>';
-echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_username">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_USER'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_username" name="mqtt_forward_username" value="' . htmlspecialchars($mf['username'] ?? '') . '" autocomplete="off" /></div>';
-echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_password">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_BROKER_PASS'), ENT_QUOTES, 'UTF-8') . '</label><input type="password" id="mqtt_forward_password" name="mqtt_forward_password" value="" autocomplete="new-password" /><span class="mc-hint">' . htmlspecialchars(mc_t('SETTINGS', 'HINT_BROKER_PASS'), ENT_QUOTES, 'UTF-8') . '</span></div>';
-echo '<div class="mc-field" style="max-width:34rem;"><label for="mqtt_forward_topic_prefix">' . htmlspecialchars(mc_t('SETTINGS', 'LABEL_TOPIC_PREFIX'), ENT_QUOTES, 'UTF-8') . '</label><input type="text" id="mqtt_forward_topic_prefix" name="mqtt_forward_topic_prefix" value="' . htmlspecialchars($mf['topicPrefix'] ?? 'maveo') . '" autocomplete="off" /><span class="mc-hint">';
-mc_th('SETTINGS', 'HINT_TOPIC_PREFIX');
-echo '</span></div>';
+/** MQTT-forward controls were promoted out of the expert section; the
+ *  consolidated "MQTT & Loxone" panel above now owns them. */
 
 echo '<p class="mc-section-title">';
 mc_te('SETTINGS', 'EXPERT_AUTH_TITLE');

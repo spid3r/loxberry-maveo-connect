@@ -195,6 +195,56 @@ echo '</div>';
 
 echo '<p class="mc-alert" style="margin-top:14px;">' . mc_t('STATUS', 'ALERT_SINGLE_SESSION', 'Nur eine MQTT-Session pro Stick möglich: offizielle Maveo-App schließen, wenn dieses Plugin die Verbindung hält.') . '</p>';
 
+/**
+ * Reference panel: door-position codes (0..6) and the Loxone control URL list.
+ * Same content as in Settings, repeated here so users designing their Loxone
+ * status block do not need to bounce between tabs.
+ */
+$loxApiOnNow = !empty(maveoconnect_load_settings_array()['loxoneApi']['enabled']);
+echo '<div class="mc-panel" style="margin-top:14px;">';
+echo '<h2 class="mc-panel-h">' . htmlspecialchars(mc_t('STATUS', 'HEAD_LOXONE_REF', 'Loxone reference')) . '</h2>';
+
+echo '<p class="mc-section-title" style="margin-top:0;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_TITLE', 'Door position codes (door_position / status.php)'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '<table class="mc-muted" style="border-collapse:collapse;font-size:.85rem;line-height:1.4;margin:0 0 8px;">';
+echo '<thead><tr>'
+    . '<th style="text-align:left;padding:4px 12px 4px 0;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_COL_CODE', 'Code'), ENT_QUOTES, 'UTF-8') . '</th>'
+    . '<th style="text-align:left;padding:4px 12px 4px 0;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_COL_LABEL', 'Label'), ENT_QUOTES, 'UTF-8') . '</th>'
+    . '<th style="text-align:left;padding:4px 0;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_COL_MEANING', 'Meaning'), ENT_QUOTES, 'UTF-8') . '</th>'
+    . '</tr></thead><tbody>';
+$statusDoorRows = [
+    ['0', 'stopped',           mc_t('SETTINGS', 'DOOR_CODE_0', 'Motor stopped between end positions')],
+    ['1', 'opening',            mc_t('SETTINGS', 'DOOR_CODE_1', 'Door opening')],
+    ['2', 'closing',            mc_t('SETTINGS', 'DOOR_CODE_2', 'Door closing')],
+    ['3', 'open',               mc_t('SETTINGS', 'DOOR_CODE_3', 'Fully open')],
+    ['4', 'closed',             mc_t('SETTINGS', 'DOOR_CODE_4', 'Fully closed')],
+    ['5', 'intermediateOpen',   mc_t('SETTINGS', 'DOOR_CODE_5', 'Intermediate / ventilation position')],
+    ['6', 'intermediateClosed', mc_t('SETTINGS', 'DOOR_CODE_6', 'Intermediate position toward closed')],
+];
+foreach ($statusDoorRows as $row) {
+    echo '<tr>'
+        . '<td style="padding:3px 12px 3px 0;font-variant-numeric:tabular-nums;">' . htmlspecialchars($row[0]) . '</td>'
+        . '<td style="padding:3px 12px 3px 0;"><code>' . htmlspecialchars($row[1]) . '</code></td>'
+        . '<td style="padding:3px 0;">' . htmlspecialchars($row[2]) . '</td>'
+        . '</tr>';
+}
+echo '</tbody></table>';
+echo '<p class="mc-muted" style="margin:0 0 12px;line-height:1.45;font-size:.82rem;">' . htmlspecialchars(mc_t('SETTINGS', 'DOOR_CODES_LOXONE_HINT', 'In a Loxone status block: open = 3 or 5, closed = 4, moving = 1 or 2. light_on is 1/0.'), ENT_QUOTES, 'UTF-8') . '</p>';
+
+echo '<p class="mc-section-title">' . htmlspecialchars(mc_t('STATUS', 'LOXAPI_REF_TITLE', 'Loxone control URLs'), ENT_QUOTES, 'UTF-8') . '</p>';
+if ($loxApiOnNow) {
+    echo '<p class="mc-muted" style="margin:0 0 6px;font-size:.85rem;">' . htmlspecialchars(mc_t('STATUS', 'LOXAPI_REF_ON', 'Enabled. Configure these URLs as Virtual Outputs in Loxone Config (Basic Auth in URL).'), ENT_QUOTES, 'UTF-8') . '</p>';
+} else {
+    echo '<p class="mc-muted mc-alert" style="margin:0 0 6px;font-size:.85rem;">' . htmlspecialchars(mc_t('STATUS', 'LOXAPI_REF_OFF', 'Currently disabled — enable "Loxone control API" in Settings to use these.'), ENT_QUOTES, 'UTF-8') . '</p>';
+}
+echo '<ul class="mc-muted" style="margin:0 0 6px;padding-left:1.25rem;line-height:1.55;font-size:.85rem;">';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/door.php?cmd=open</code></li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/light.php?state=on</code></li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/reclaim.php</code></li>';
+echo '<li><code>http://loxberry:loxberry@LB-IP/admin/plugins/maveoconnect/api/status.php</code></li>';
+echo '</ul>';
+echo '<p class="mc-muted" style="margin:0;font-size:.82rem;">' . htmlspecialchars(mc_t('SETTINGS', 'LOXAPI_AUTH_NOTE', 'Authentication uses the standard LoxBerry plugin Basic Auth. Send the credentials inline in the URL configured in your Loxone Virtual Output, e.g. http://loxberry:loxberry@<LoxBerry-IP>/...'), ENT_QUOTES, 'UTF-8') . '</p>';
+echo '</div>';
+
 echo '</div>';
 
 $jsT = [
