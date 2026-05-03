@@ -1,3 +1,8 @@
+## [1.0.1-beta.3](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1-beta.2...v1.0.1-beta.3) (2026-05-03)
+
+* feat(loxone): on-the-fly log diagnostics from the Loxone app
+* feat(loxone): expose detached / takeover state via MQTT and status.php
+
 ## [1.0.1-beta.2](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1-beta.1...v1.0.1-beta.2) (2026-05-03)
 
 * feat(log): add size-based log rotation and clear-log control
