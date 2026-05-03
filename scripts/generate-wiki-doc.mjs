@@ -82,9 +82,13 @@ export function screenshotGallerySnippet() {
   }
   return [
     "  * Plugin‑Oberfläche (DE, Beispiel):",
+    "",
     `{{${SCREENSHOT_BASE}/maveoconnect-overview-de.png?820|Übersicht}}`,
+    "",
     `{{${SCREENSHOT_BASE}/maveoconnect-status-de.png?820|Live‑Status mit Tor‑Symbol}}`,
+    "",
     `{{${SCREENSHOT_BASE}/maveoconnect-settings-de.png?820|Einstellungen inkl. Loxone/MQTT‑Hinweis}}`,
+    "",
     "  * EN‑Varianten der gleichen Seiten liegen als ''maveoconnect-*-en.png'' unter ''docs/wiki-assets/'' im Repository (für zweisprachige Wikis).",
   ].join("\n");
 }

@@ -68,9 +68,13 @@ Voraussetzung: **LoxBerry ab Version 3.x**. ZIP unter **System → Plugins** ins
 ===== Screenshots =====
 
   * Plugin‑Oberfläche (DE, Beispiel):
+
 {{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/maveoconnect-overview-de.png?820|Übersicht}}
+
 {{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/maveoconnect-status-de.png?820|Live‑Status mit Tor‑Symbol}}
+
 {{https://raw.githubusercontent.com/spid3r/loxberry-maveo-connect/main/docs/wiki-assets/maveoconnect-settings-de.png?820|Einstellungen inkl. Loxone/MQTT‑Hinweis}}
+
   * EN‑Varianten der gleichen Seiten liegen als ''maveoconnect-*-en.png'' unter ''docs/wiki-assets/'' im Repository (für zweisprachige Wikis).
 
 ===== MQTT-Weiterleitung =====
