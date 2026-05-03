@@ -1,3 +1,7 @@
+## [1.0.1-beta.2](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1-beta.1...v1.0.1-beta.2) (2026-05-03)
+
+* feat(log): add size-based log rotation and clear-log control
+
 ## [1.0.1-beta.1](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1...v1.0.1-beta.1) (2026-05-03)
 
 * fix(build): strip VS Code auto-attach env from spawned subprocesses
