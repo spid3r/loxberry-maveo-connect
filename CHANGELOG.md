@@ -1,3 +1,20 @@
+# [1.1.0](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1...v1.1.0) (2026-05-03)
+
+
+### Bug Fixes
+
+* **build:** strip VS Code auto-attach env from spawned subprocesses ([e9f1530](https://github.com/spid3r/loxberry-maveo-connect/commit/e9f15304f3a60f4d9dbf4b17ef3b73ca4da2e47c))
+* **loxone:** re-publish mqtt_connected/health after manual /api/reconnect ([068de68](https://github.com/spid3r/loxberry-maveo-connect/commit/068de68dbc193272597cc24faa6f7dabaaea2003))
+
+
+### Features
+
+* **api:** add Loxone control HTTP API behind LoxBerry Basic Auth ([778b06c](https://github.com/spid3r/loxberry-maveo-connect/commit/778b06c8ac2d44a6f88c4509e168396f9e5ac81c))
+* **log:** add size-based log rotation and clear-log control ([75a8b6b](https://github.com/spid3r/loxberry-maveo-connect/commit/75a8b6b104edc1eadfe882ad2a9af941e43764a7))
+* **loxone:** expose detached / takeover state via MQTT and status.php ([69c350a](https://github.com/spid3r/loxberry-maveo-connect/commit/69c350a4ce58dbf4401069120393349ead8b8447))
+* **loxone:** on-the-fly log diagnostics from the Loxone app ([9008893](https://github.com/spid3r/loxberry-maveo-connect/commit/900889348bdb99e83765d61d624fdf7f37c767e7))
+* **loxone:** publish retained last_error and health diagnose topics ([f423ab8](https://github.com/spid3r/loxberry-maveo-connect/commit/f423ab86d4c6f91bb7303ae8c87f8a8b339c48fb)), closes [hi#frequency](https://github.com/hi/issues/frequency)
+
 ## [1.0.1-beta.6](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1-beta.5...v1.0.1-beta.6) (2026-05-03)
 
 * fix(loxone): re-publish mqtt_connected/health after manual /api/reconnect
