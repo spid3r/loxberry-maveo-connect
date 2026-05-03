@@ -1,3 +1,8 @@
+## [1.0.1-beta.1](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1...v1.0.1-beta.1) (2026-05-03)
+
+* fix(build): strip VS Code auto-attach env from spawned subprocesses
+* feat(api): add Loxone control HTTP API behind LoxBerry Basic Auth
+
 ## [1.0.1](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.0...v1.0.1) (2026-05-02)
 
 
