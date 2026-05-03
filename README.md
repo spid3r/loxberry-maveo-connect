@@ -179,6 +179,21 @@ Inside the *Erweiterte Einstellungen / Advanced settings* `<details>` block:
 The probe endpoint (`POST /api/maveo/probe`) **also** accepts these overrides as
 request fields, so you can test EU vs US **before** committing them to disk.
 
+### 3) Log housekeeping
+
+The daemon writes to `$LBPLOG/maveoconnect/daemon.log`. To keep the LoxBerry SD
+card safe, the plugin **rotates the log itself**:
+
+- **`daemon.log`** flips to `daemon.log.1` once it crosses ~1 MiB; one backup is
+  kept (≈ 2 MiB cap total). Override via `settings.json → logging.maxBytes` and
+  `logging.keepFiles`; set `keepFiles: 0` to disable rotation.
+- **`daemon.shell.log`** (nohup output from start/stop) is rotated to `.1` at
+  daemon start when it exceeds ~1 MiB.
+- The **Log** page has a **„Log löschen“ / „Clear log“** button that truncates
+  the live file, drops rotated backups, and clears the in-memory ring buffer.
+  Internally this is just `POST /api/log/clear` against the local daemon — same
+  Apache Basic Auth as the rest of the WebUI.
+
 ## MQTT topics
 
 When **MQTT forward** is enabled in *Settings → Advanced settings*, the daemon publishes

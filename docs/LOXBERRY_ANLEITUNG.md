@@ -98,4 +98,6 @@ Die Loxone-Steuer-API ist für dein **Heimnetz** gedacht — die Basic-Auth sch�
 ## 7. Log & Support
 
 - **Protokoll**: letzte Zeilen des Daemon-Logs; Log-Level unter *Einstellungen → Erweitert* (z. B. `debug` für mehr Detail).
+- **Log-Rotation**: Das Plugin rotiert `daemon.log` automatisch bei ca. **1 MiB** auf `daemon.log.1` (eine Sicherung; Gesamtbedarf ~2 MiB). Auch `daemon.shell.log` (nohup-Ausgabe von Start/Stop) wird beim Daemon-Start ab ~1 MiB rotiert. Werte sind über `settings.json → logging.maxBytes` und `logging.keepFiles` änderbar (`keepFiles: 0` schaltet die Rotation ab).
+- **„Log löschen“**: Auf der Seite **Protokoll** steht ein Button, der `daemon.log` und alle Sicherungen sofort leert und den Live-Puffer in der Web-Oberfläche zurücksetzt — praktisch nach einem Debug-Lauf.
 - **Issues / Entwicklung**: [GitHub Issues](https://github.com/spid3r/loxberry-maveo-connect/issues) — dieses Plugin ist **Community-Best-Effort**, kein offizieller Marantec-Support.

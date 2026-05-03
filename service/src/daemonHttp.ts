@@ -296,7 +296,10 @@ export type DaemonRequestDeps = {
   getClient: () => StickClientPort | undefined;
   mutable: DaemonMutableState;
   bindStickState: () => void;
-  log: Logger & { getRecentLines(maxLines?: number): string[] };
+  log: Logger & {
+    getRecentLines(maxLines?: number): string[];
+    clear(): { truncated: boolean; removedBackups: number; ringEntriesCleared: number };
+  };
   /** Trigger settings reload from disk and rebuild client + reconnect; used by /api/reload + UI auto-restart hook. */
   reloadFromDisk?: () => Promise<void>;
 };
@@ -374,6 +377,24 @@ export function createDaemonRequestHandler(deps: DaemonRequestDeps) {
         });
 
         statusWaiters.push(entry);
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/log/clear") {
+        /**
+         * Manual log purge from the WebUI: truncate `daemon.log`, drop rotated
+         * backups, and reset the in-memory ring buffer so the next /api/log/recent
+         * call returns an empty list. Returns a small report so the PHP layer can
+         * tell the user how many files were cleared. We re-emit a single info line
+         * after clearing so the log explicitly records that this happened.
+         */
+        const result = deps.log.clear();
+        deps.log.info("log cleared via API", result);
+        writeJson(res, 200, {
+          ok: true,
+          message: "Log geleert.",
+          ...result,
+        });
         return;
       }
 

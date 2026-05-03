@@ -39,7 +39,10 @@ function requireEnv(name: string, v: string): string {
 const logFile = join(LOG_DIR || "/tmp", "daemon.log");
 
 let settings: PluginSettings = loadSettingsFile(requireEnv("MAVOECONNECT_CONFIG", CONFIG_PATH));
-const log: Logger = createLogger(settings.logging?.level ?? "info", logFile);
+const log: Logger = createLogger(settings.logging?.level ?? "info", logFile, {
+  maxBytes: settings.logging?.maxBytes,
+  keepFiles: settings.logging?.keepFiles,
+});
 const forwarder = new MqttForwarder(log);
 
 let maveoEnv: NodeJS.ProcessEnv = settingsToMaveoEnv(settings, process.env);
@@ -267,6 +270,7 @@ async function reloadFromDisk(): Promise<void> {
     log.setLevel(newLogLevel);
     log.info("reloadFromDisk: log level changed", { level: newLogLevel });
   }
+  log.setRotation({ maxBytes: fresh.logging?.maxBytes, keepFiles: fresh.logging?.keepFiles });
 
   settings = fresh;
   maveoEnv = settingsToMaveoEnv(settings, process.env);

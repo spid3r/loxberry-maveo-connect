@@ -39,6 +39,17 @@ export type PluginSettings = {
   };
   logging?: {
     level?: LogLevelName;
+    /**
+     * Rotate `daemon.log` once it grows past this many bytes. Default 1 MiB.
+     * Combined with `keepFiles` this caps total on-disk log usage in
+     * `$LBPLOG/maveoconnect/`. Set to 0 to disable rotation entirely.
+     */
+    maxBytes?: number;
+    /**
+     * Number of `daemon.log.N` backups to retain (1 = keep one rotated copy).
+     * Total disk usage ≈ `(keepFiles + 1) × maxBytes`.
+     */
+    keepFiles?: number;
   };
   mqttForward?: {
     enabled?: boolean;
@@ -165,7 +176,7 @@ const defaultSettings = (): PluginSettings => ({
     port: 47832,
     listenHost: "127.0.0.1",
   },
-  logging: { level: "info" },
+  logging: { level: "info", maxBytes: 1024 * 1024, keepFiles: 1 },
   mqttForward: {
     enabled: false,
     brokerUrl: "mqtt://127.0.0.1:1883",
