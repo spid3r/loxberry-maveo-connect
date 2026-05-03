@@ -1,6 +1,10 @@
 ====== Maveo Connect / Marantec (Connect Stick over MQTT) ======
 
 ++++ Version History |
+**Version 1.1.1**
+
+  * **wiki:** include semantic-release level-1 headings and skip pre-releases (51f7fb6)
+
 **Version 1.1.0**
 
   * **build:** strip VS Code auto-attach env from spawned subprocesses (e9f1530)

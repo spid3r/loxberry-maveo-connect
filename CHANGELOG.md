@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.1.0...v1.1.1) (2026-05-03)
+
+
+### Bug Fixes
+
+* **wiki:** include semantic-release level-1 headings and skip pre-releases ([51f7fb6](https://github.com/spid3r/loxberry-maveo-connect/commit/51f7fb6512e9d5e339905a4ea7795a9e7883cc5a))
+
 # [1.1.0](https://github.com/spid3r/loxberry-maveo-connect/compare/v1.0.1...v1.1.0) (2026-05-03)
 
 
